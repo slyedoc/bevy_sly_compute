@@ -16,29 +16,31 @@ use bevy::{
     ecs::system::StaticSystemParam,
     prelude::*,
     render::{
-        self, render_asset::{
-            PrepareAssetError, RenderAsset, RenderAssets,
-        }, render_resource::{CachedPipelineState, PipelineCacheError, Sampler}, renderer::RenderDevice, texture::{
-            DefaultImageSampler, FallbackImage, FallbackImageCubemap, FallbackImageFormatMsaaCache, FallbackImageZero, ImageSamplerDescriptor
-        }
+        render_asset::{PrepareAssetError, RenderAsset, RenderAssets},
+        render_resource::{CachedPipelineState, PipelineCacheError, Sampler},
+        renderer::RenderDevice,
+        texture::{
+            DefaultImageSampler, FallbackImage, FallbackImageCubemap, FallbackImageFormatMsaaCache,
+            FallbackImageZero, ImageSamplerDescriptor,
+        },
     },
     utils::HashSet,
 };
 
-
 /// Helper module to import most used elements.
 pub mod prelude {
-    pub use bevy_sly_compute_macros::AsBindGroupCompute;    
     pub use crate::{
-        ComputeShader,
-        ComputePlugin,
-        ComputeAssets,
-        traits::AsBindGroupCompute,
-        plugin::*,        
         pipeline_cache::{AppPipelineCache, CachedAppComputePipelineId},
+        plugin::*,
+        traits::AsBindGroupCompute,
+        ComputeAssets, ComputePlugin, ComputeShader,
     };
+    pub use bevy_sly_compute_macros::AsBindGroupCompute;
     // Since these are always used when using this crate
-    pub use bevy::{reflect::TypeUuid, render::render_resource::{ShaderRef, ShaderType}};
+    pub use bevy::{
+        reflect::TypeUuid,
+        render::render_resource::{ShaderRef, ShaderType},
+    };
 }
 
 // IMPORTANT: This is a hack, this duplicates ALL images via duplicate RenderAssets<Images> created in world, doubling all texture usage on gpu
@@ -72,7 +74,6 @@ impl ComputePlugin {
 
 impl Plugin for ComputePlugin {
     fn build(&self, app: &mut App) {
-
         if app.is_plugin_added::<Self>() {
             return;
         }
@@ -82,13 +83,13 @@ impl Plugin for ComputePlugin {
             .init_resource::<ComputeExtractedAssets<Image>>()
             .init_resource::<ComputePrepareNextFrameAssets<Image>>()
             //.add_systems(Startup, setup)
-            .add_systems(PreUpdate, extract_shaders)            
+            .add_systems(PreUpdate, extract_shaders)
             .add_systems(
                 Update,
                 (
                     process_pipeline_queue_system,
                     extract_compute_asset::<Image>, // ExtractSchedule
-                    prepare_assets::<Image>,        // AFTER::register_system( render_app, prepare_assets::<A>.in_set(RenderSet::PrepareAssets),
+                    prepare_assets::<Image>, // AFTER::register_system( render_app, prepare_assets::<A>.in_set(RenderSet::PrepareAssets),
                 )
                     .chain(),
             );
@@ -105,7 +106,7 @@ impl Plugin for ComputePlugin {
             .init_resource::<FallbackImage>()
             .init_resource::<FallbackImageZero>()
             .init_resource::<FallbackImageCubemap>()
-            .init_resource::<FallbackImageFormatMsaaCache>()            
+            .init_resource::<FallbackImageFormatMsaaCache>()
             .insert_resource(AppPipelineCache::new(&render_device));
     }
 }
@@ -142,7 +143,7 @@ fn process_pipeline_queue_system(
     mut pipeline_cache: ResMut<AppPipelineCache>,
     //mut compute_assets: Res<ComputeAssets<Image>>
     render_device: Res<RenderDevice>,
-) {    
+) {
     let mut waiting_pipelines = mem::take(&mut pipeline_cache.waiting_pipelines);
     let mut pipelines = mem::take(&mut pipeline_cache.pipelines);
 
@@ -162,7 +163,8 @@ fn process_pipeline_queue_system(
             continue;
         }
 
-        pipeline.state = pipeline_cache.process_compute_pipeline(id, &pipeline.descriptor, &render_device);
+        pipeline.state =
+            pipeline_cache.process_compute_pipeline(id, &pipeline.descriptor, &render_device);
 
         if let CachedPipelineState::Err(err) = &pipeline.state {
             match err {
@@ -186,7 +188,6 @@ fn process_pipeline_queue_system(
     }
 
     pipeline_cache.pipelines = pipelines;
-
 }
 
 fn extract_shaders(

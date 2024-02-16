@@ -8,7 +8,6 @@
 
 use std::borrow::Cow;
 use std::iter::FusedIterator;
-use std::mem;
 
 use bevy::prelude::*;
 use bevy::render::render_resource::{

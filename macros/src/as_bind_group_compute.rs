@@ -557,7 +557,7 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
 }
 
 fn get_fallback_image(
-    render_path: &syn::Path,
+    _render_path: &syn::Path,
     dimension: BindingTextureDimension,
 ) -> proc_macro2::TokenStream {
     quote! {
