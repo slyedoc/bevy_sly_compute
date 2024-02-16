@@ -132,9 +132,9 @@ fn run<T: ComputeTrait>(
     };
 
     let mut encoder =
-        render_device.create_command_encoder(&CommandEncoderDescriptor { label: None });
+        render_device.create_command_encoder(&CommandEncoderDescriptor { label: T::label() });
 
-    // create staging buffers
+    // create staging buffers, 
     let staging = data.create_staging_buffers(&render_device);
 
     let pipeline = pipeline_cache
@@ -244,7 +244,6 @@ pub struct ComputeWorker<T: ComputeTrait> {
 impl<T: ComputeTrait> FromWorld for ComputeWorker<T> {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>().clone();
-
         let asset_server = world.resource::<AssetServer>();
         let shader = match T::shader() {
             ShaderRef::Default => None,

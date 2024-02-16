@@ -1,4 +1,6 @@
 mod traits;
+use std::mem;
+
 pub use traits::*;
 
 mod plugin;
@@ -16,7 +18,7 @@ use bevy::{
     render::{
         self, render_asset::{
             PrepareAssetError, RenderAsset, RenderAssets,
-        }, render_resource::Sampler, renderer::RenderDevice, texture::{
+        }, render_resource::{CachedPipelineState, PipelineCacheError, Sampler}, renderer::RenderDevice, texture::{
             DefaultImageSampler, FallbackImage, FallbackImageCubemap, FallbackImageFormatMsaaCache, FallbackImageZero, ImageSamplerDescriptor
         }
     },
@@ -38,8 +40,6 @@ pub mod prelude {
     // Since these are always used when using this crate
     pub use bevy::{reflect::TypeUuid, render::render_resource::{ShaderRef, ShaderType}};
 }
-
-
 
 // IMPORTANT: This is a hack, this duplicates ALL images via duplicate RenderAssets<Images> created in world, doubling all texture usage on gpu
 // This is a temporary solution to get things working, the goal is to only extract used images
@@ -131,7 +131,7 @@ pub struct ComputeExtractedAssets<A: RenderAsset> {
     removed: Vec<AssetId<A>>,
 }
 
-// TODO: consider storing inside system?
+// TODO: not sure I need this
 /// All assets that should be prepared next frame.
 #[derive(Resource, Default)]
 pub struct ComputePrepareNextFrameAssets<A: RenderAsset> {
@@ -142,8 +142,51 @@ fn process_pipeline_queue_system(
     mut pipeline_cache: ResMut<AppPipelineCache>,
     //mut compute_assets: Res<ComputeAssets<Image>>
     render_device: Res<RenderDevice>,
-) {
-    pipeline_cache.process_queue(&render_device);
+) {    
+    let mut waiting_pipelines = mem::take(&mut pipeline_cache.waiting_pipelines);
+    let mut pipelines = mem::take(&mut pipeline_cache.pipelines);
+
+    {
+        let mut new_pipelines = pipeline_cache.new_pipelines.lock();
+        for new_pipeline in new_pipelines.drain(..) {
+            let id = pipelines.len();
+            pipelines.push(new_pipeline);
+            waiting_pipelines.insert(CachedAppComputePipelineId(id));
+        }
+    }
+
+    for id in waiting_pipelines {
+        dbg!("processing pipeline", id);
+        let pipeline = &mut pipelines[id.0];
+        if matches!(pipeline.state, CachedPipelineState::Ok(_)) {
+            continue;
+        }
+
+        pipeline.state = pipeline_cache.process_compute_pipeline(id, &pipeline.descriptor, &render_device);
+
+        if let CachedPipelineState::Err(err) = &pipeline.state {
+            match err {
+                PipelineCacheError::ShaderNotLoaded(_)
+                | PipelineCacheError::ShaderImportNotYetAvailable => {
+                    // retry
+                    pipeline_cache.waiting_pipelines.insert(id);
+                }
+                // shader could not be processed ... retrying won't help
+                PipelineCacheError::ProcessShaderError(err) => {
+                    let error_detail = err.emit_to_string(&pipeline_cache.shader_cache.composer);
+                    error!("failed to process shader:\n{}", error_detail);
+                    continue;
+                }
+                PipelineCacheError::CreateShaderModule(description) => {
+                    error!("failed to create shader module: {}", description);
+                    continue;
+                }
+            }
+        }
+    }
+
+    pipeline_cache.pipelines = pipelines;
+
 }
 
 fn extract_shaders(

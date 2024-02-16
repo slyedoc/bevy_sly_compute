@@ -2,11 +2,16 @@
 name = "bevy_sly_compute"
 version = "0.1.0"
 edition = "2021"
-
+categories = []
+description = "Bevy Compute Shader Plugin"
+exclude = ["assets/"]
+keywords = ["bevy"]
+repository = "https://github.com/slyedoc/bevy_sly_compute"
+license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy_sly_compute_macros = { path = "./macros" }
+bevy_sly_compute_macros = { path = "./macros", version = "0.0.1" }
 
 bevy = "0.12"
 parking_lot = "0.12.1"

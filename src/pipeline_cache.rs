@@ -27,13 +27,13 @@ use wgpu::{
 };
 
 pub struct CachedAppPipeline {
-    state: CachedPipelineState,
-    descriptor: Box<ComputePipelineDescriptor>,
+    pub state: CachedPipelineState,
+    pub descriptor: Box<ComputePipelineDescriptor>,
 }
 
 /// Index of a cached compute pipeline in a [`PipelineCache`].
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-pub struct CachedAppComputePipelineId(usize);
+pub struct CachedAppComputePipelineId(pub usize);
 
 impl CachedAppComputePipelineId {
     /// An invalid cached compute pipeline index, often used to initialize a variable.
@@ -46,7 +46,7 @@ impl CachedAppComputePipelineId {
 }
 
 #[derive(Default)]
-struct ShaderData {
+pub struct ShaderData {
     pipelines: HashSet<CachedAppComputePipelineId>,
     processed_shaders: HashMap<Vec<ShaderDefVal>, ErasedShaderModule>,
     resolved_imports: HashMap<ShaderImport, AssetId<Shader>>,
@@ -54,12 +54,12 @@ struct ShaderData {
 }
 
 #[derive(Default)]
-struct ShaderCache {
-    data: HashMap<AssetId<Shader>, ShaderData>,
-    shaders: HashMap<AssetId<Shader>, Shader>,
-    import_path_shaders: HashMap<ShaderImport, AssetId<Shader>>,
-    waiting_on_import: HashMap<ShaderImport, Vec<AssetId<Shader>>>,
-    composer: naga_oil::compose::Composer,
+pub struct ShaderCache {
+    pub data: HashMap<AssetId<Shader>, ShaderData>,
+    pub shaders: HashMap<AssetId<Shader>, Shader>,
+    pub import_path_shaders: HashMap<ShaderImport, AssetId<Shader>>,
+    pub waiting_on_import: HashMap<ShaderImport, Vec<AssetId<Shader>>>,
+    pub composer: naga_oil::compose::Composer,
 }
 
 impl ShaderCache {
@@ -321,7 +321,7 @@ impl ShaderCache {
 
 type LayoutCacheKey = (Vec<BindGroupLayoutId>, Vec<PushConstantRange>);
 #[derive(Default, Clone)]
-struct LayoutCache {
+pub struct LayoutCache {
     layouts: HashMap<LayoutCacheKey, ErasedPipelineLayout>,
 }
 
@@ -353,12 +353,12 @@ impl LayoutCache {
 
 #[derive(Resource)]
 pub struct AppPipelineCache {
-    layout_cache: LayoutCache,
-    shader_cache: ShaderCache,
+    pub layout_cache: LayoutCache,
+    pub shader_cache: ShaderCache,
 
-    pipelines: Vec<CachedAppPipeline>,
-    waiting_pipelines: HashSet<CachedAppComputePipelineId>,
-    new_pipelines: Mutex<Vec<CachedAppPipeline>>,
+    pub pipelines: Vec<CachedAppPipeline>,
+    pub waiting_pipelines: HashSet<CachedAppComputePipelineId>,
+    pub new_pipelines: Mutex<Vec<CachedAppPipeline>>,
 }
 
 impl AppPipelineCache {
@@ -385,52 +385,12 @@ impl AppPipelineCache {
         id
     }
 
-    pub fn process_queue(&mut self, device: &RenderDevice) {
-        let mut waiting_pipelines = mem::take(&mut self.waiting_pipelines);
-        let mut pipelines = mem::take(&mut self.pipelines);
+    // Moved logic to process_pipeline_queue_system
+    // pub fn process_queue(&mut self, device: &RenderDevice) {
+       
+    // }
 
-        {
-            let mut new_pipelines = self.new_pipelines.lock();
-            for new_pipeline in new_pipelines.drain(..) {
-                let id = pipelines.len();
-                pipelines.push(new_pipeline);
-                waiting_pipelines.insert(CachedAppComputePipelineId(id));
-            }
-        }
-
-        for id in waiting_pipelines {
-            let pipeline = &mut pipelines[id.0];
-            if matches!(pipeline.state, CachedPipelineState::Ok(_)) {
-                continue;
-            }
-
-            pipeline.state = self.process_compute_pipeline(id, &pipeline.descriptor, device);
-
-            if let CachedPipelineState::Err(err) = &pipeline.state {
-                match err {
-                    PipelineCacheError::ShaderNotLoaded(_)
-                    | PipelineCacheError::ShaderImportNotYetAvailable => {
-                        // retry
-                        self.waiting_pipelines.insert(id);
-                    }
-                    // shader could not be processed ... retrying won't help
-                    PipelineCacheError::ProcessShaderError(err) => {
-                        let error_detail = err.emit_to_string(&self.shader_cache.composer);
-                        error!("failed to process shader:\n{}", error_detail);
-                        continue;
-                    }
-                    PipelineCacheError::CreateShaderModule(description) => {
-                        error!("failed to create shader module: {}", description);
-                        continue;
-                    }
-                }
-            }
-        }
-
-        self.pipelines = pipelines;
-    }
-
-    fn process_compute_pipeline(
+    pub fn process_compute_pipeline(
         &mut self,
         id: CachedAppComputePipelineId,
         descriptor: &ComputePipelineDescriptor,
@@ -466,7 +426,7 @@ impl AppPipelineCache {
         };
 
         let pipeline = device.create_compute_pipeline(&descriptor);
-
+        
         CachedPipelineState::Ok(Pipeline::ComputePipeline(pipeline))
     }
 
