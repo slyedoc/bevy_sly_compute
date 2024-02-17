@@ -12,9 +12,10 @@ Context - See [PR #8440](https://github.com/bevyengine/bevy/issues/8440)
 
 See Examples:
 
-- [basic.rs](examples/basic.rs)-[wgsl](assets/basic.wgsl) - The Simplest use case
-- [inspect.rs](examples/inspect.rs)-[wgsl](examples/inspect.wgsl) - Egui inspector with embedded compute shader, (my workflow)
-- [image.rs](examples/image.rs)-[wgsl](assets/image.wgsl) - **WIP**
+- [basic](examples/basic.rs)-[wgsl](assets/basic.wgsl) - The Simplest use case
+- [inspect](examples/inspect.rs)-[wgsl](examples/inspect.wgsl) - Egui inspector with embedded compute shader, (my workflow)
+- [image](examples/image.rs)-[wgsl](assets/image.wgsl) - **WIP**
+- [many](examples/many.rs)-(uses basic) - Multiple ComputeWorkerPlugins
 
 ## Usage
 
@@ -134,7 +135,7 @@ Would love to take to someone that has more knowledge in what would be ideal for
 - [x] Multiple Passes
 - [ ] Instancing
 - [ ] Go over macro - Right now I have just been adding what I need as I need it
-- [ ] Many Plugin Instances
+- [x] Many Plugin Instances
 - [ ] Many Entity Instances - Will look into this after Instancing
 
 - [ ] Stop Duplicating ```RenderAssets<Image>``` - This duplicate texture memory usage, come back to this once compute world or render options are figured out

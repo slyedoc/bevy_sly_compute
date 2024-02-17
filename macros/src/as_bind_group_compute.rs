@@ -290,6 +290,7 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
                         image_format,
                         access,
                         visibility,
+                        staging,
                     } = get_storage_texture_binding_attr(nested_meta_items)?;
 
                     let visibility =
@@ -835,6 +836,7 @@ struct StorageTextureAttrs {
     // which will error if the access is not member of the StorageTextureAccess enum.
     access: proc_macro2::TokenStream,
     visibility: ShaderStageVisibility,
+    staging: bool,
 }
 
 impl Default for StorageTextureAttrs {
@@ -844,6 +846,7 @@ impl Default for StorageTextureAttrs {
             image_format: quote! { Rgba8Unorm },
             access: quote! { ReadWrite },
             visibility: ShaderStageVisibility::compute(),
+            staging: false,
         }
     }
 }
@@ -852,7 +855,7 @@ fn get_storage_texture_binding_attr(metas: Vec<Meta>) -> Result<StorageTextureAt
     let mut storage_texture_attrs = StorageTextureAttrs::default();
 
     for meta in metas {
-        use syn::Meta::{List, NameValue};
+        use syn::Meta::{List, NameValue, Path};
         match meta {
             // Parse #[storage_texture(0, dimension = "...")].
             NameValue(m) if m.path == DIMENSION => {
@@ -870,6 +873,10 @@ fn get_storage_texture_binding_attr(metas: Vec<Meta>) -> Result<StorageTextureAt
             // Parse #[storage_texture(0, visibility(...))].
             List(m) if m.path == VISIBILITY => {
                 storage_texture_attrs.visibility = get_visibility_flag_value(&m)?;
+            }
+            // Parse #[storage_texture(0, staging))].
+            Path(m) if m == STAGING => {
+                storage_texture_attrs.staging = true;
             }
             NameValue(m) => {
                 return Err(Error::new_spanned(
@@ -896,6 +903,7 @@ const ACCESS: Symbol = Symbol("access");
 const SAMPLE_TYPE: Symbol = Symbol("sample_type");
 const FILTERABLE: Symbol = Symbol("filterable");
 const MULTISAMPLED: Symbol = Symbol("multisampled");
+// using Staging symbol for storage texture staging
 
 // Values for `dimension` attribute.
 const DIM_1D: &str = "1d";

@@ -58,7 +58,7 @@ fn setup(mut commands: Commands) {
     commands.spawn(Text2dBundle {
         text: Text {
             sections: vec![TextSection {
-                value: "Press SPACE to run the compute shader, check console".to_string(),
+                value: "Press SPACE to run the compute shader\nCheck console".to_string(),
                 style: TextStyle {
                     font_size: 40.0,
                     color: Color::WHITE,

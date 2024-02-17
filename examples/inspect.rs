@@ -13,9 +13,6 @@ use bevy_inspector_egui::{
     DefaultInspectorConfigPlugin,
 };
 
-
-
-// Example for loading internal asset
 const SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(11880782407192052050);
 const TEXTURE_SIZE: u32 = 256;  // size of generated texture
 const WORKGROUP_SIZE: u32 = 8;  // size of workgroup, shader should match

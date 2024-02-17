@@ -108,6 +108,7 @@ fn setup<T: ComputeTrait>(mut commands: Commands) {
     commands.init_resource::<ComputeWorker<T>>();
 }
 
+// 
 fn run<T: ComputeTrait>(
     mut events: EventReader<ComputeEvent<T>>,
     worker: Res<ComputeWorker<T>>, 
@@ -118,9 +119,10 @@ fn run<T: ComputeTrait>(
     gpu_images: Res<ComputeAssets<Image>>,
     fallback_image: Res<FallbackImage>,
 ) {
+    // TODO: test multiple events
     events.read().for_each(|event| {
 
-        info!("running compute event");
+        // check passes for early out
         event.passes.iter().for_each(|pass| {
             // check entry points
             if !T::entry_points().contains(&pass.entry) {
@@ -135,11 +137,10 @@ fn run<T: ComputeTrait>(
                     return;
                 }
             });
-
         });
         
+        // Generate bind group
         // Ordering seems off here, are gpu images ready?
-        // NOTE: This would be in a prepare function if we used a different compute world
         let Ok(prepared) = data.as_bind_group(
             &worker.bind_group_layout,
             &render_device,
@@ -150,8 +151,8 @@ fn run<T: ComputeTrait>(
             return;
         };
 
-        let mut encoder =
-            render_device.create_command_encoder(&CommandEncoderDescriptor { label: T::label() });
+        // create command encoder for our compute passes
+        let mut encoder = render_device.create_command_encoder(&CommandEncoderDescriptor { label: T::label() });
 
         // create staging buffers,
         let staging = data.create_staging_buffers(&render_device);
@@ -179,7 +180,6 @@ fn run<T: ComputeTrait>(
         }
 
         // copy buffer to staging
-        //encoder.copy_buffer_to_buffer(&buffer, 0, &staging_buffer, 0, size);
         for (index, staging_buffer) in staging.iter() {
             let (_, buffer) = prepared.bindings.iter().find(|(i, _)| i == index).unwrap();
             let OwnedBindingResource::Buffer(buffer) = buffer else {
@@ -192,16 +192,7 @@ fn run<T: ComputeTrait>(
         // submit
         render_queue.submit(Some(encoder.finish()));
 
-        // map buffer
-
-        // let buffer_slice = staging_buffer.slice(..);
-        // buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-        //     let err = result.err();
-        //     if err.is_some() {
-        //         let some_err = err.unwrap();
-        //         panic!("{}", some_err.to_string());
-        //     }
-        // });
+        // create buffer slices of staging buffers
         let buffer_slices = staging
             .iter()
             .map(|(index, staging_buffer)| {
@@ -217,32 +208,18 @@ fn run<T: ComputeTrait>(
             })
             .collect::<Vec<_>>();
 
+        // wait for gpu to finish
         render_device.wgpu_device().poll(wgpu::MaintainBase::Wait);
-
-        // let data = buffer_slice.get_mapped_range();
-        // // Since contents are got in bytes, this converts these bytes back to f32
-        // let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
-        // dbg!(result);
-
-        // Write the data to T
-
+        
+        // Write the data from buffer slices back to T
+        // Will trigger change detection
         data.map_staging_mappings(&buffer_slices);
 
+        // doing this here because it was in hello compute, need to double check this
         drop(buffer_slices);
-
         staging.iter().for_each(|(_, staging_buffer)| {
             staging_buffer.unmap();
         });
-
-        // With the current interface, we have to make sure all mapped views are
-        // dropped before we unmap the buffer.
-        //drop(data);
-
-        // staging_buffer.unmap(); // Unmaps buffer from memory
-        //                         // If you are familiar with C++ these 2 lines can be thought of similarly to:
-        //                         //   delete myPointer;
-        //                         //   myPointer = NULL;
-        //                         // It effectively frees the memory
     });
 }
     
