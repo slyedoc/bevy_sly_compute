@@ -39,10 +39,7 @@ fn run_compute(
     simple: Res<Simple>,
 ) {
     if keys.just_pressed(KeyCode::Space) {                
-        compute_events.send(ComputeEvent::<Simple> {
-            workgroups: [simple.vec.len() as u32, 1, 1],     
-            ..default()    
-        });
+        compute_events.send(ComputeEvent::<Simple>::new_xyz(simple.vec.len() as u32, 1, 1));
     }
 }
 
@@ -61,7 +58,7 @@ fn setup(mut commands: Commands) {
     commands.spawn(Text2dBundle {
         text: Text {
             sections: vec![TextSection {
-                value: "Press SPACE to run the compute shader, data will log here".to_string(),
+                value: "Press SPACE to run the compute shader, check console".to_string(),
                 style: TextStyle {
                     font_size: 40.0,
                     color: Color::WHITE,

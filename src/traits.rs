@@ -133,7 +133,8 @@ pub trait ComputeShader: Send + Sync + 'static {
 
     /// By default, the shader entry point is `main`.
     /// You can change it from here.
-    fn entry_point<'a>() -> &'a str {
-        "main"
+    /// if you have multiple entry points, you can return them all.
+    fn entry_points<'a>() -> Vec<&'a str> {
+        vec!["main"]
     }
 }

@@ -29,6 +29,7 @@ bevy-inspector-egui = "0.22"
 
 
 [patch.crates-io]
+bevy-inspector-egui = { git = "https://github.com/slyedoc/bevy-inspector-egui.git", branch = "image-format" }
 
 #This is a one line patch to make the DefaultImageSampler pub
 

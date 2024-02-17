@@ -16,9 +16,11 @@ use bevy_inspector_egui::{
 
 const WORKGROUP_SIZE: u32 = 8;
 const TEXTURE_SIZE: u32 = 256;
-
-const WORKGROUPS: [u32; 3] = [TEXTURE_SIZE / WORKGROUP_SIZE, TEXTURE_SIZE / WORKGROUP_SIZE, 1];
-
+const WORKGROUP: UVec3 = UVec3 {
+    x: TEXTURE_SIZE / WORKGROUP_SIZE,
+    y: TEXTURE_SIZE / WORKGROUP_SIZE,
+    z: 1,
+};
 
 fn main() {
     App::new()
@@ -45,6 +47,7 @@ pub struct Simple {
     
     #[uniform(1)]
     color: Color,
+
 
     #[storage_texture(2, image_format = Rgba8Unorm, access = ReadWrite)]
     pub image: Handle<Image>,    
@@ -83,6 +86,10 @@ impl ComputeShader for Simple {
     fn shader() -> ShaderRef {        
         "image.wgsl".into()
     }
+
+    fn entry_points<'a>() -> Vec<&'a str> {
+        vec!["main"]
+    }
 }
 
 fn run_compute(
@@ -90,11 +97,7 @@ fn run_compute(
     mut compute_events: EventWriter<ComputeEvent<Simple>>,  
 ) {
     if keys.just_pressed(KeyCode::Space) {
-        compute_events.send(ComputeEvent::<Simple> {
-            workgroups: [TEXTURE_SIZE / WORKGROUP_SIZE, TEXTURE_SIZE / WORKGROUP_SIZE, 1],
-            vars: vec![],
-            ..default()
-        });
+        compute_events.send(ComputeEvent::<Simple>::new(WORKGROUP));
     }
 }
 

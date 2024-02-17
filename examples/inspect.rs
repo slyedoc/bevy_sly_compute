@@ -13,11 +13,17 @@ use bevy_inspector_egui::{
     DefaultInspectorConfigPlugin,
 };
 
-// size of generated texture
-const TEXTURE_SIZE: u32 = 256;
+
 
 // Example for loading internal asset
 const SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(11880782407192052050);
+const TEXTURE_SIZE: u32 = 256;  // size of generated texture
+const WORKGROUP_SIZE: u32 = 8;  // size of workgroup, shader should match
+const WORKGROUP: UVec3 = UVec3 { // dispatch size
+    x: TEXTURE_SIZE / WORKGROUP_SIZE,
+    y: TEXTURE_SIZE / WORKGROUP_SIZE,
+    z: 1,
+};
 
 fn main() {
     let mut app = App::new();
@@ -27,7 +33,6 @@ fn main() {
         ComputeWorkerPlugin::<Simple>::default(),
         SimpleInspectorPlugin,
     ))
-    //.add_plugins()
     .init_resource::<Simple>()
     .register_type::<Simple>()
     .add_systems(Startup, setup)
@@ -54,6 +59,7 @@ pub struct Simple {
 
     #[storage(1, staging)]
     vec: Vec<f32>,
+    
 
     #[storage_texture(2, image_format = Rgba8Unorm, access = ReadWrite)]
     pub image: Handle<Image>,    
@@ -71,7 +77,7 @@ impl FromWorld for Simple {
             },
             TextureDimension::D2,
             // setting to red
-            &[0, 0, 0, 255],
+            &[1, 0, 0, 255],
             TextureFormat::Rgba8Unorm,
         );
         // set the usage
@@ -95,6 +101,10 @@ impl FromWorld for Simple {
 impl ComputeShader for Simple {
     fn shader() -> ShaderRef {
         ShaderRef::Handle(SHADER_HANDLE)
+    }
+
+    fn entry_points<'a>() -> Vec<&'a str> {
+        vec!["pre", "main"]
     }
 }
 
@@ -140,11 +150,25 @@ fn simple_inspector_ui(world: &mut World) {
                     .add_sized(button_size, egui::Button::new("Run Compute"))
                     .clicked()
                 {
-                    let count = world.resource::<Simple>().vec.len() as u32;
+                    let count =world.resource::<Simple>().vec.len() as u32;
                     world.send_event(ComputeEvent::<Simple> {
-                        workgroups: [count, 1, 1],                        
+                        // first pass depends on the vec length                        
+                        passes: vec![ComputePass {
+                            entry:"pre", 
+                            workgroups: vec![
+                                UVec3::new(count, 1, 1),
+                                UVec3::new(1, 1, 1) // running second pass updating only first position 
+                            ],                            
+                        },
+                        // second pass depends on the image size
+                        ComputePass {
+                            entry:"main", 
+                            workgroups: vec![WORKGROUP],                            
+                        }
+                        ],
                         ..default()
                     });
+                    
                 }
 
                 ui.allocate_space(ui.available_size());

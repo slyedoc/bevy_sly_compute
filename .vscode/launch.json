@@ -1,0 +1,138 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'bevy_sly_compute'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=bevy_sly_compute"
+                ],
+                "filter": {
+                    "name": "bevy_sly_compute",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'image'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=image",
+                    "--package=bevy_sly_compute"
+                ],
+                "filter": {
+                    "name": "image",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'image'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=image",
+                    "--package=bevy_sly_compute"
+                ],
+                "filter": {
+                    "name": "image",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'basic'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=basic",
+                    "--package=bevy_sly_compute"
+                ],
+                "filter": {
+                    "name": "basic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'basic'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=basic",
+                    "--package=bevy_sly_compute"
+                ],
+                "filter": {
+                    "name": "basic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'inspect'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=inspect",
+                    "--package=bevy_sly_compute"
+                ],
+                "filter": {
+                    "name": "inspect",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'inspect'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=inspect",
+                    "--package=bevy_sly_compute"
+                ],
+                "filter": {
+                    "name": "inspect",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

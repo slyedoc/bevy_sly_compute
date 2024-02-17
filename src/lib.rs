@@ -157,7 +157,6 @@ fn process_pipeline_queue_system(
     }
 
     for id in waiting_pipelines {
-        dbg!("processing pipeline", id);
         let pipeline = &mut pipelines[id.0];
         if matches!(pipeline.state, CachedPipelineState::Ok(_)) {
             continue;

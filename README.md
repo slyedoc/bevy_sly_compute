@@ -50,15 +50,36 @@ Add ```ComputeWorkerPlugin<T>``` and your resource.
     })
 ```
 
-Use can events to execute compute shader. (This will change, multi pass support)
+Use can events to execute compute shader.
 
 ```rust
-    mut compute_events: EventWriter<ComputeEvent<Simple>>,
-    ...
-    compute_events.send(ComputeEvent::<Simple> {
-        workgroups: [simple.vec.len() as u32, 1, 1],     
-        ..default()    
-    });
+  mut compute_events: EventWriter<ComputeEvent<Simple>>,
+  ...
+  compute_events.send(ComputeEvent::<Simple>::new_xyz(simple.vec.len() as u32, 1, 1));
+```
+
+ Multiple entry points and multiple passes are supported.  See [inspect.rs](examples/inspect.rs) example.
+
+```rust
+  let count = world.resource::<Simple>().vec.len() as u32;
+  world.send_event(ComputeEvent::<Simple> {
+      // first pass depends on the vec length                        
+      passes: vec![
+        ComputePass {
+          entry:"pre", 
+          workgroups: vec![
+              UVec3::new(count, 1, 1),
+              UVec3::new(1, 1, 1) // running second pass updating only first position 
+          ],                            
+        },
+        // second pass depends on the image size
+        ComputePass {
+            entry:"main", 
+            workgroups: vec![WORKGROUP],                            
+        }
+      ],
+      ..default()
+  });
 ```
 
 Use change tracking to see when to see new values (Should this be event as well?)
@@ -73,17 +94,15 @@ fn log_change( simple: Res<Simple> ) {
 
 ## Important
 
-Requires patched bevy for 2 changes:
+Require patches currently:
 
-- Make DefaultImageSampler pub
+- Bevy
+  - Make DefaultImageSampler pub
+  - Change from [PR #9943](https://github.com/bevyengine/bevy/pull/9943) - add storage_texture option to as_bind_group macro
+    - This will come in 0.13, but would affect this plugin.
 
-  ```rust
-  -pub struct DefaultImageSampler(pub(crate) Sampler);
-  +pub struct DefaultImageSampler(pub Sampler);
-  ```
-
-- Change from [PR #9943](https://github.com/bevyengine/bevy/pull/9943) - add storage_texture option to as_bind_group macro
-  - This will come in 0.13, but would affect this plugin.
+- bevy-inspector-egui
+  - add few image formats, I should put in a PR
 
 - See [Cargo.toml](Cargo.toml) patch section.
 
@@ -105,19 +124,20 @@ Would love to take to someone that has more knowledge in what would be ideal for
       - Render World - most ideal, but not possible far as I know currently.
       - Compute World - doable but can't share with render world.  Would still require a _ReverseExtract_.
       - App World - This is basically the "I will do it live, F*CK It" option.  This is what I am doing now.
-  - [ ] Work on System Scheduals and labels once path is figured out
-- [ ] Examples:
-  - [x] Uniform
-  - [-] Texture - **WIP**
-  - [ ] Buffer
-  - [ ] Multipass
-  - [ ] Instancing
+  - [ ] Work on System Scheduals and labels once path above is figured out
+- [ ] Data:
+  - [ ] Uniform
+  - [x] Storage
+  - [-] StorageTexture - **WIP**
+  - [ ] Buffer  
+- [x] Multiple Entry Points
+- [x] Multiple Passes
+- [ ] Instancing
 - [ ] Go over macro - Right now I have just been adding what I need as I need it
-- [ ] Many Plugin Instances - Only requires a State type with T marker.
-  - How do you create unique state types as enum and phantom data?
+- [ ] Many Plugin Instances
 - [ ] Many Entity Instances - Will look into this after Instancing
 
-- [ ] Duplicating ```RenderAssets<Image>``` - This duplicate texture memory usage, come back to this once compute world or render options are figured out
+- [ ] Stop Duplicating ```RenderAssets<Image>``` - This duplicate texture memory usage, come back to this once compute world or render options are figured out
 - [ ] Profile and check system scheduals
 - [ ] Remove Bevy patches
 
@@ -132,8 +152,6 @@ Would love to take to someone that has more knowledge in what would be ideal for
 
 - ```bevy_app_compute``` - Works, but no texture support, and magic strings.
 - Compute world - like render_app but for compute shaders
-  - Would require a _ReverseExtract_
-  - Is this ideal?
-- Stay in app world - **Current Approach**- would require assess only in render_app, or duplication.
+  - Would require a _ReverseExtract_ (Is this ideal?)
   - Currently, duplicating ```RenderAssets<Image>``` and resources in app world, a hack and will double the memory usage of all textures.
     - Ideally we would only extract the textures we need if any.
