@@ -94,7 +94,8 @@ pub trait AsBindGroupCompute {
     fn create_staging_buffers(
         &self,
         render_device: &RenderDevice,
-    ) -> Vec<(u32, bevy::render::render_resource::Buffer)>
+        images: &ComputeAssets<Image>,
+    ) -> Vec<(u32, Option<bevy::render::render_resource::OwnedBindingResource>)>
     where
         Self: Sized;
 

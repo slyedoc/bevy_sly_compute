@@ -1,12 +1,9 @@
-use bevy_macro_utils::{get_lit_bool, get_lit_str, BevyManifest, Symbol};
+use bevy_macro_utils::{get_lit_bool, get_lit_str, Symbol};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::{quote, ToTokens};
 use syn::{
-    parse::{Parse, ParseStream},
-    punctuated::Punctuated,
-    token::Comma,
-    Data, DataStruct, Error, Fields, LitInt, LitStr, Meta, MetaList, Result,
+    parse::{Parse, ParseStream}, punctuated::Punctuated, token::Comma, Data, DataStruct, Error, Fields, GenericArgument, LitInt, LitStr, Meta, MetaList, PathArguments, Result, Type
 };
 
 const UNIFORM_ATTRIBUTE_NAME: Symbol = Symbol("uniform");
@@ -39,12 +36,10 @@ enum BindingState<'a> {
 }
 
 pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream> {
-    let manifest = BevyManifest::default();
-    let render_path = manifest.get_path("bevy_render");
 
     let mut binding_states: Vec<BindingState> = Vec::new();
     let mut binding_impls = Vec::new();
-    let mut staging_impls = Vec::new();
+    let mut staging_storage_impls = Vec::new();
     let mut staging_mappings = Vec::new();
     let mut binding_layouts = Vec::new();
     let mut attr_prepared_data_ident = None;
@@ -247,19 +242,23 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
                                 ))
                             )
                         }});
-                        // CHANGE: Added staging buffer creation, &self.#field_name.len() 
+
                         if staging {
-                            staging_impls.push(quote! {
+                            let size = match is_vec_type(&field.ty) {
+                                Some(t) => quote! { self.#field_name.len() as u64 * <#t as bevy::render::render_resource::ShaderType>::min_size().get() },
+                                None => quote! { <#field_ty as bevy::render::render_resource::ShaderType>::min_size().get() },
+                            };
+
+                            staging_storage_impls.push(quote! {
                                 (
                                     #binding_index,
-                                    render_device.create_buffer(&bevy::render::render_resource::BufferDescriptor {
+                                    Some(bevy::render::render_resource::OwnedBindingResource::Buffer(render_device.create_buffer(&bevy::render::render_resource::BufferDescriptor {
                                         label: None,
                                         usage: bevy::render::render_resource::BufferUsages::MAP_READ
                                             | bevy::render::render_resource::BufferUsages::COPY_DST,  
-                                        // TODO: fix type                                      
-                                        size: self.#field_name.len() as u64 * <f32 as bevy::render::render_resource::ShaderType>::min_size().get(), 
+                                        size: #size,
                                         mapped_at_creation: false,
-                                    })
+                                    })))
                                 )                                
                             });
 
@@ -296,7 +295,7 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
                     let visibility =
                         visibility.hygienic_quote(&quote! { bevy::render::render_resource });
 
-                    let fallback_image = get_fallback_image(&render_path, dimension);
+                    let fallback_image = get_fallback_image(dimension);
 
                     binding_impls.push(quote! {
                         ( #binding_index,
@@ -323,6 +322,41 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
                             count: None,
                         }
                     });
+
+                    if staging {
+
+                        staging_storage_impls.push(quote! {
+                            (
+                                #binding_index,
+                                {
+                                    let handle: Option<&bevy::asset::Handle<bevy::render::texture::Image>> = (&self.#field_name).into();
+                                    // let Some(image) = images.get(handle) else {                                    
+                                    //     panic!("failed to find image for staging");
+                                    // }
+                                    // let image = images.get(handle) {
+                                    //     return None;
+                                    // }
+
+                                    //dbg!(image.size);                                  
+
+                                    Some(bevy::render::render_resource::OwnedBindingResource::Buffer(render_device.create_buffer(&bevy::render::render_resource::BufferDescriptor {
+                                        label: None,
+                                        usage: bevy::render::render_resource::BufferUsages::COPY_DST
+                                        | bevy::render::render_resource::BufferUsages::MAP_READ,
+                                        size: 4, //image.size.width as u64 * image.size.height as u64 * 4,
+                                        mapped_at_creation: false,
+                                    })))
+                                }
+                            
+                            )                                
+                        });
+
+                        // staging_mappings.push(quote! {{
+                        //     let buffer_slice = &buffer_slices.iter().find(|(i, _)| i == &#binding_index).unwrap().1;
+                        //     let data = buffer_slice.get_mapped_range();
+                        //     self.#field_name = bytemuck::cast_slice(&data).to_vec();                                
+                        // }});
+                    }
                 }
                 BindingType::Texture => {
                     let TextureAttrs {
@@ -335,7 +369,7 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
                     let visibility =
                         visibility.hygienic_quote(&quote! { bevy::render::render_resource });
 
-                    let fallback_image = get_fallback_image(&render_path, *dimension);
+                    let fallback_image = get_fallback_image(*dimension);
 
                     binding_impls.push(quote! {
                         (
@@ -377,7 +411,7 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
                     let visibility =
                         visibility.hygienic_quote(&quote! { bevy::render::render_resource });
 
-                    let fallback_image = get_fallback_image(&render_path, *dimension);
+                    let fallback_image = get_fallback_image(*dimension);
 
                     binding_impls.push(quote! {
                         (
@@ -537,13 +571,14 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
             }
 
             fn create_staging_buffers(
-                &self,
+                &self,                
                 render_device: &bevy::render::renderer::RenderDevice,
-            ) -> Vec<(u32, bevy::render::render_resource::Buffer)>
+                images: &bevy_sly_compute::ComputeAssets<bevy::render::texture::Image>,
+            ) -> Vec<(u32, Option<bevy::render::render_resource::OwnedBindingResource>)>
             {
                 use bevy::render::render_resource::AsBindGroupShaderType;
 
-                vec![#(#staging_impls,)*]
+                vec![#(#staging_storage_impls,)*]
 
             }
 
@@ -557,8 +592,7 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
      }))
 }
 
-fn get_fallback_image(
-    _render_path: &syn::Path,
+fn get_fallback_image(   
     dimension: BindingTextureDimension,
 ) -> proc_macro2::TokenStream {
     quote! {
@@ -1153,4 +1187,25 @@ fn get_storage_binding_attr(metas: Vec<Meta>) -> Result<StorageAttrs> {
         buffer,
         staging,
     })
+}
+
+/// Checks if the given type is a `Vec<T>` and returns `Some(T)` if it is,
+/// or `None` otherwise.
+fn is_vec_type(ty: &Type) -> Option<syn::Type> {
+    if let Type::Path(type_path) = ty {
+        // Check if the path ends with "Vec"
+        if let Some(last_segment) = type_path.path.segments.last() {
+            if last_segment.ident == "Vec" {
+                // Check if there is exactly one generic argument, which should be `T`
+                if let PathArguments::AngleBracketed(angle_bracketed_param) = &last_segment.arguments {
+                    if angle_bracketed_param.args.len() == 1 {
+                        if let Some(GenericArgument::Type(ty)) = angle_bracketed_param.args.first() {
+                            return Some(ty.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }

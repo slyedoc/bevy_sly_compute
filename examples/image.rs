@@ -142,7 +142,7 @@ fn simple_inspector_ui(world: &mut World) {
                     .clicked()
                 {
                     let mut worker = world.resource_mut::<ComputeWorker<Simple>>();
-
+                    todo!();
                 }
 
                 ui.allocate_space(ui.available_size());

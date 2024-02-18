@@ -3,7 +3,9 @@
 
 @group(0) @binding(1) var<storage, read_write> my_storage: array<f32>;
 
-@group(0) @binding(2) var image: texture_storage_2d<rgba8unorm, read_write>;
+@group(0) @binding(2) var<uniform> color: vec4<f32>;
+
+@group(0) @binding(3) var image: texture_storage_2d<rgba8unorm, read_write>;
 
 @compute @workgroup_size(1)
 fn pre(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
@@ -21,6 +23,6 @@ fn main(
     let uv = vec2<f32>(f32(invocation_id.x) / uv_scale.x, 1.0 - f32(invocation_id.y) / uv_scale.y);
    
     let c = vec4<f32>(uv.x, uv.y, 0.0, 1.0);
-       
+
     textureStore(image, location, c);
 }

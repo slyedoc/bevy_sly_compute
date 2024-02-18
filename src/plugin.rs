@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 use core::panic;
-use std::{borrow::Cow, marker::PhantomData, ops::Deref, vec};
+use std::{borrow::Cow, default, marker::PhantomData, ops::Deref, vec};
 
 use bevy::{
     ecs::world::{FromWorld, World},
@@ -153,9 +153,14 @@ fn run<T: ComputeTrait>(
 
         // create command encoder for our compute passes
         let mut encoder = render_device.create_command_encoder(&CommandEncoderDescriptor { label: T::label() });
-
-        // create staging buffers,
-        let staging = data.create_staging_buffers(&render_device);
+        
+        // create staging buffers, we filter out None, these coudlnt find the image to get the size
+        let staging = data.create_staging_buffers(&render_device, &gpu_images)
+            .into_iter()
+            .filter(| (_, resource) | resource.is_some() )
+            .map(|(index,  resource)| (index, resource.unwrap()))
+            .collect::<Vec<_>>();
+        
 
         // run passes
         for pass in event.passes.iter() {
@@ -180,11 +185,16 @@ fn run<T: ComputeTrait>(
         }
 
         // copy buffer to staging
-        for (index, staging_buffer) in staging.iter() {
+        for (index, owned_staging_buffer) in staging.iter() {
             let (_, buffer) = prepared.bindings.iter().find(|(i, _)| i == index).unwrap();
             let OwnedBindingResource::Buffer(buffer) = buffer else {
                 error!("failed to find buffer for staging");
                 return;
+            };
+
+            let staging_buffer = match owned_staging_buffer {
+                OwnedBindingResource::Buffer(b) => b,
+                _ => unreachable!(),                
             };
             encoder.copy_buffer_to_buffer(&buffer, 0, &staging_buffer, 0, buffer.size());
         }
@@ -195,7 +205,11 @@ fn run<T: ComputeTrait>(
         // create buffer slices of staging buffers
         let buffer_slices = staging
             .iter()
-            .map(|(index, staging_buffer)| {
+            .map(|(index, owned_staging_buffer)| {
+                let staging_buffer = match owned_staging_buffer {
+                    OwnedBindingResource::Buffer(b) => b,
+                    _ => unreachable!(),                
+                };
                 let buffer_slice = staging_buffer.slice(..);
                 buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
                     let err = result.err();
@@ -218,7 +232,10 @@ fn run<T: ComputeTrait>(
         // doing this here because it was in hello compute, need to double check this
         drop(buffer_slices);
         staging.iter().for_each(|(_, staging_buffer)| {
-            staging_buffer.unmap();
+            match staging_buffer {
+                OwnedBindingResource::Buffer(b) => b.unmap(),
+                _ => unreachable!(),                
+            };
         });
     });
 }

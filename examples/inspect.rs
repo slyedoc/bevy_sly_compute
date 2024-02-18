@@ -54,13 +54,17 @@ pub struct Simple {
     #[uniform(0, read_only, visibility = "compute")]
     add: f32,
 
+    // staging
     #[storage(1, staging)]
     vec: Vec<f32>,
-    
 
-    #[storage_texture(2, image_format = Rgba8Unorm, access = ReadWrite)]
-    pub image: Handle<Image>,    
+    #[uniform(2)]
+    color: Color,
+    
+    #[storage_texture(3, image_format = Rgba8Unorm, access = ReadWrite, staging)]
+    image: Handle<Image>,    
 }
+
 
 impl FromWorld for Simple {
     fn from_world(world: &mut World) -> Self {
@@ -74,7 +78,7 @@ impl FromWorld for Simple {
             },
             TextureDimension::D2,
             // setting to red
-            &[1, 0, 0, 255],
+            &[255, 0, 0, 255],
             TextureFormat::Rgba8Unorm,
         );
         // set the usage
@@ -89,7 +93,8 @@ impl FromWorld for Simple {
 
         Self {            
             add: 1.0,
-            vec: vec![1.0, 2.0, 3.0, 4.0],
+            color: Color::BLUE,
+            vec: vec![1.0, 2.0],
             image: image_handle,
         }
     }
