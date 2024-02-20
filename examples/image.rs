@@ -23,9 +23,10 @@ fn main() {
     .init_resource::<Simple>()
     .register_type::<Simple>()
     .add_systems(Startup, setup)
-    .add_systems(Update, trigger_computue.run_if(resource_changed::<Simple>()) )
-    .add_systems(Last, process_image.run_if(on_event::<ComputeComplete<Simple>>()))
+    .add_systems(Update, trigger_computue.run_if(resource_changed::<Simple>()) ) // run compute when resource changes
+    .add_systems(Last, compute_complete.run_if(on_event::<ComputeComplete<Simple>>()))
     .add_systems(Update, close_on_esc)
+    // helper to not move the mouse when over egui window
     .add_systems(
         PreUpdate,
         (absorb_egui_inputs)
@@ -93,7 +94,6 @@ impl ComputeShader for Simple {
 fn trigger_computue(    
     mut compute: EventWriter<ComputeEvent<Simple>>,
 ) {
-    
     compute.send(ComputeEvent::<Simple> {
         passes: vec![
             ComputePass {
@@ -108,6 +108,10 @@ fn trigger_computue(
         ],
         ..default()
     });
+}
+
+fn compute_complete() {
+    // do anything you like here   
 }
 
 #[derive(Component)]
@@ -152,21 +156,6 @@ fn setup(
         Target,
     )); 
 }
-
-
-// this fires after the compute shader has run and the texture has been updated
-// and AssetEvent<Image>::Modified { id } for the Image has been sent
-// Issue is the material does not get updated form that, and we
-// need to trigger AssetEvent<StandardMaterial>::Modified { id } for the material
-fn process_image(
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
-    mut query: Query<&Handle<StandardMaterial>, With<Target>>,
-) {
-    // Shouldnt need to do this
-    let material_handle = query.single_mut();
-    let _ = standard_materials.get_mut(material_handle);
-}
-
 
 // helper fuction to not move the mouse when over egui window
 fn absorb_egui_inputs(mut mouse: ResMut<Input<MouseButton>>, mut contexts: EguiContexts) {

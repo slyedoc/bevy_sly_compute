@@ -2,23 +2,20 @@
 
 Plugin aims to provide easy way access data created or modified on the GPU, back in app world.
 
-> This is a hack job, just enough to get it work, but will work for my needs.  Now repo is mainly me exploring bevy, rust macros and wgpu.
+> **Experiment**: This is a collection of compromises to just get this working.  
 
-An ideal solution would most likely be a PR to bevy:
+An ideal solution would:
 
-- No Compute World, stay in render world, (worthless without long running compute tasks, and not possable in wgpu currently (find Issue for this)) and no texture duplication issues.
+- No Compute World, and don't duplicate render assets like I do here.  Stay in render world
+  - Main reason to separate would be async long-running tasks, and while nice, not needed for most use cases (make long-running v2).
+  - Leaves render app polling alone.
 - Extend AsBindGroup to create staging buffers (similar to this repo)
-- In cleanup, map staging buffers back to render world resource, then send an event or just storing in a resource (resources are retained in render world)
-- _ReverseExtract_ Phase or Events to move data back to app world.
-
-## Issue
-
-You can't get data out of render_app as far as I know, this bypasses that by using the app world by duplicating things.
-
-- ```PiplelineCache```
-- ```RenderAssets<Image>```
+- **BIG** In cleanup, or new stage, copes data back to app world from render world
+  - This could be a _ReverseExtract_ Phase or Event queue to move data back to app world.
 
 See [PR #8440](https://github.com/bevyengine/bevy/issues/8440)
+
+
 
 ### TODO
 
@@ -26,17 +23,17 @@ See [PR #8440](https://github.com/bevyengine/bevy/issues/8440)
 - [ ] Data:
   - [ ] Uniform
   - [x] Storage
-  - [x] Storage Texture  
+  - [x] Storage Texture - handles padded buffer due to 
   - [ ] Buffer  
 - Examples:
   - [x] Basic
   - [x] Inspect
   - [x] Image  
-  - [ ] [AsBindGroupShaderType] (https:///github.com/bevyengine/bevy/crates/bevy_sprite/src/mesh2d/color_material.rs)
+  - [ ] [AsBindGroupShaderType](https:///github.com/bevyengine/bevy/crates/bevy_sprite/src/mesh2d/color_material.rs)
   - [x] Many - Multiple ComputeWorkerPlugins
-- [ ] AssetEvent::Modified
+- [x] AssetEvent::Modified
   - [x] Egui Inspector - added patch to bevy-inspector-egui to clear resized images on asset modified events
-  - [ ] StandardMaterial - Currently have mark material as modified
+  - [x] StandardMaterial - See mark_shader_modified, workaround to mark all materials as modified, not ideal, you can also use mark_shader_modified on any materials you want to be updated on compute image changes  
   [AsBindGroupShaderType]
 - [ ] Instancing
   - How about a pass per entity?
@@ -81,9 +78,9 @@ Require patches currently:
 See Examples:
 
 - [basic](examples/basic.rs)-[wgsl](assets/basic.wgsl) - The Simplest use case
-- [inspect](examples/inspect.rs)-[wgsl](examples/inspect.wgsl) - Egui inspector with embedded compute shader, (my workflow)
-- [image](examples/image.rs)-[wgsl](assets/image.wgsl) - **WIP**
+- [image](examples/image.rs)-[wgsl](assets/image.wgsl) - Compute image and use it in material
 - [many](examples/many.rs)-(uses basic) - Multiple ComputeWorkerPlugins
+- [terrain](examples/terrain.rs)-[wgsl](examples/terrain.wgsl) - Egui inspector with embedded compute shader, generates mesh from image and collider
 
 ## Usage
 

@@ -29,12 +29,12 @@ fn main() {
             vec: vec![1.0, 2.0, 3.0, 4.0],
         })
         .add_systems(Startup, setup)
-        .add_systems(Update, (run_compute, close_on_esc))
-        .add_systems(Last, log_change.run_if(on_event::<ComputeComplete<Simple>>()))        
+        .add_systems(Update, (trigger_compute, close_on_esc))
+        .add_systems(Last, compute_complete.run_if(on_event::<ComputeComplete<Simple>>()))        
         .run();
 }
 
-fn run_compute(
+fn trigger_compute(
     keys: Res<Input<KeyCode>>,
     mut compute_events: EventWriter<ComputeEvent<Simple>>,
     simple: Res<Simple>,
@@ -44,13 +44,10 @@ fn run_compute(
     }
 }
 
-fn log_change( simple: Res<Simple> ) {
+fn compute_complete( simple: Res<Simple> ) {
     dbg!(&simple);
 }
 
-
-
-// Setup a simple 2D camera and text
 fn setup(mut commands: Commands) {
 
     commands.spawn(Camera2dBundle::default());

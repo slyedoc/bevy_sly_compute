@@ -6,6 +6,7 @@ use bevy::{
     ecs::world::{FromWorld, World},
     prelude::*,
     render::{
+        render_asset::RenderAsset,
         render_resource::*,
         renderer::{RenderDevice, RenderQueue},
         texture::{FallbackImage, TextureFormatPixelInfo},
@@ -19,10 +20,30 @@ use bytemuck::{bytes_of, cast_slice, from_bytes, AnyBitPattern, NoUninit};
 use wgpu::{BindGroupEntry, CommandEncoder, CommandEncoderDescriptor, ComputePassDescriptor};
 
 use crate::{
-    error::{Error, Result}, events::*, pipeline_cache::{AppPipelineCache, CachedAppComputePipelineId}, ComputeAssets, ComputeEvent, ComputePlugin, ComputeShader, ComputeTrait, RequeueComputeEvent, StageBindGroup
+    error::{Error, Result},
+    events::*,
+    pipeline_cache::{AppPipelineCache, CachedAppComputePipelineId},
+    ComputeAssets, ComputeEvent, ComputePlugin, ComputeShader, ComputeSystems, ComputeTrait,
+    RequeueComputeEvent, StageBindGroup,
 };
 
 use crate::AsBindGroupCompute;
+
+/// Resource to manage the retry limit for compute events
+#[derive(Resource)]
+pub struct ComputeRetryLimit<T: ComputeTrait> {
+    pub count: u32,
+    _marker: PhantomData<T>,
+}
+
+impl<T: ComputeTrait> Default for ComputeRetryLimit<T> {
+    fn default() -> Self {
+        Self {
+            count: 5,
+            _marker: Default::default(),
+        }
+    }
+}
 
 pub struct ComputeWorkerPlugin<T: ComputeTrait> {
     _marker: PhantomData<T>,
@@ -43,23 +64,25 @@ impl<T: ComputeTrait> Plugin for ComputeWorkerPlugin<T> {
             app.add_plugins(ComputePlugin::default());
         }
 
-        app
+        app.init_resource::<ComputeRetryLimit<T>>()
             .add_event::<ComputeEvent<T>>()
-            .add_event::<crate::events::ComputeComplete<T>>()
+            .add_event::<ComputeComplete<T>>()
             .add_event::<RequeueComputeEvent<T>>()
             .add_systems(Startup, setup::<T>)
-            // all work is done here
-            .add_systems(Update, 
-                (   
-                    run::<T>,
+            .add_systems(
+                Update,
+                (
+                    run::<T>, // all gpu work is done here
                     // hack to retry when pipeline is not ready
-                    requeue::<T>
-                ).chain()
-                .run_if(on_event::<ComputeEvent<T>>())
+                    requeue::<T>,
+                )
+                    .chain()
+                    .run_if(on_event::<ComputeEvent<T>>())
+                    .in_set(ComputeSystems::Main)
+                    .after(ComputeSystems::Prepare),
             );
     }
 }
-
 
 fn setup<T: ComputeTrait>(mut commands: Commands) {
     // delay the creation till pipeline cache exists
@@ -82,6 +105,7 @@ fn run<T: ComputeTrait>(
     mut images: ResMut<Assets<Image>>,
     gpu_images: Res<ComputeAssets<Image>>,
     fallback_image: Res<FallbackImage>,
+    retry_limit: Res<ComputeRetryLimit<T>>,
 ) {
     // TODO: test multiple events
     events.read().for_each(|event| {
@@ -106,10 +130,9 @@ fn run<T: ComputeTrait>(
             &gpu_images,
             &fallback_image,
         ) else {
-            if event.retry > 3 {
+            if event.retry > retry_limit.count {
                 error!("failed to prepare compute worker bind group, retry limit reached");
-            }
-            else {
+            } else {
                 requeue_events.send(RequeueComputeEvent {
                     passes: event.passes.clone(),
                     retry: event.retry + 1,
@@ -134,11 +157,11 @@ fn run<T: ComputeTrait>(
             .into_iter()
             .map(|handle| {
                 let image = images.get(&handle).unwrap();
-                //let _gpu_image = gpu_images.get(handle).unwrap();
-                let width = image.width() as usize;
-                let height = image.height() as usize;
-                let pixel_size = image.texture_descriptor.format.pixel_size();
-                let buffer_dimensions = BufferDimensions::new(width, height, pixel_size as usize);
+                let buffer_dimensions = BufferDimensions::new(
+                    image.width() as usize,
+                    image.height() as usize,
+                    image.texture_descriptor.format.pixel_size(),
+                );
                 (
                     handle,
                     render_device.create_buffer(&bevy::render::render_resource::BufferDescriptor {
@@ -185,7 +208,7 @@ fn run<T: ComputeTrait>(
             }
         }
 
-        // copy resource from gpu to buffer on cpu
+        // copy gpu buffer to staging buffer on cpu
         for (index, staging_buff) in storage_buffers.iter() {
             // find resource on gpu
             let Some((_, OwnedBindingResource::Buffer(gpu_buffer))) =
@@ -198,34 +221,33 @@ fn run<T: ComputeTrait>(
             encoder.copy_buffer_to_buffer(&gpu_buffer, 0, &staging_buff, 0, gpu_buffer.size());
         }
 
-        // copy images from gpu to buffer on cpu
-        stage_image
-            .iter()
-            .for_each(|(handle, buffer, dim)| {
-                let gpu_image = gpu_images.get(handle).unwrap();
-                encoder.copy_texture_to_buffer(
-                    gpu_image.texture.as_image_copy(),
-                    ImageCopyBuffer {
-                        buffer: &buffer,
-                        layout: ImageDataLayout {
-                            bytes_per_row: Some(dim.padded_bytes_per_row as u32),
-                            rows_per_image: None,
-                            ..Default::default()
-                        },
+        // copy gpu texture to staging buffer on cpu
+        stage_image.iter().for_each(|(handle, buffer, dim)| {
+            let gpu_image = gpu_images.get(handle).unwrap();
+            encoder.copy_texture_to_buffer(
+                gpu_image.texture.as_image_copy(),
+                ImageCopyBuffer {
+                    buffer: &buffer,
+                    layout: ImageDataLayout {
+                        bytes_per_row: Some(dim.padded_bytes_per_row as u32),
+                        rows_per_image: None,
+                        ..Default::default()
                     },
-                    Extent3d {
-                        width: dim.width as u32,
-                        height: dim.height as u32,
-                        depth_or_array_layers: 1,
-                    },
-                );
-            });
+                },
+                Extent3d {
+                    width: dim.width as u32,
+                    height: dim.height as u32,
+                    depth_or_array_layers: 1,
+                },
+            );
+        });
 
         // submit, this will wait for everything to finish,
         // TODO: we have no idea what render app is doing
         render_queue.submit(Some(encoder.finish()));
 
-        // Note that we're not calling `.await` here will call render_device.wgpu_device().poll belo
+        // create buffer slices for storage buffers and images
+        // TODO: look at channels
         let storage_buffer_slices = storage_buffers
             .iter()
             .map(|(index, buffer)| {
@@ -241,7 +263,8 @@ fn run<T: ComputeTrait>(
             })
             .collect::<Vec<_>>();
 
-        let image_buffer_slices = stage_image.iter()            
+        let image_buffer_slices = stage_image
+            .iter()
             .map(|(_handle, buffer, _dim)| {
                 let buffer_slice = buffer.slice(..);
                 buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -255,37 +278,28 @@ fn run<T: ComputeTrait>(
             })
             .collect::<Vec<_>>();
 
-        // await here?
-
         // wait for gpu to finish
         render_device.wgpu_device().poll(wgpu::MaintainBase::Wait);
 
         // Write the data from buffer slices back to T
-        // Will trigger change detection
         data.bypass_change_detection()
             .map_storage_mappings(&storage_buffer_slices);
 
+        // Write the data from buffer slices back to Assets<Image>
         for (index, (handle, _buffer, dim)) in stage_image.iter().enumerate() {
             let image = images.get_mut(handle).unwrap();
-            let pixel_size = image.texture_descriptor.format.pixel_size() as usize; // Assuming you have this
-
             let padded_data = &image_buffer_slices[index].get_mapped_range();
 
-            // I need to convert the padded buffer to unpadded buffer
-            let mut unpadded_data = Vec::with_capacity(dim.width * dim.height * pixel_size);
+            // coverted form padded buffer, reuse image.data
+            image.data.clear();
             for row in 0..dim.height {
                 let start = row * dim.padded_bytes_per_row;
                 let end = start + dim.unpadded_bytes_per_row;
-                unpadded_data.extend_from_slice(&padded_data[start..end]);
+                image.data.extend_from_slice(&padded_data[start..end]);
             }
 
-            // this doesnt work
-            image.data = unpadded_data;
-
             // notify asset event
-            asset_event.send(AssetEvent::Modified {
-                id: handle.id(),
-            });
+            asset_event.send(AssetEvent::Modified { id: handle.id() });
         }
 
         drop(storage_buffer_slices);
@@ -298,6 +312,7 @@ fn run<T: ComputeTrait>(
             buffer.unmap();
         });
 
+        // notify complete
         complete_events.send(ComputeComplete::<T>::default());
     });
 }
@@ -306,10 +321,10 @@ fn requeue<T: ComputeTrait>(
     mut events: EventReader<RequeueComputeEvent<T>>,
     mut compute: EventWriter<ComputeEvent<T>>,
 ) {
-    
     events.read().for_each(|event| {
         compute.send(ComputeEvent::<T> {
             passes: event.passes.clone(),
+            retry: event.retry,
             ..default()
         });
     });

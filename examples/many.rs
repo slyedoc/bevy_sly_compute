@@ -28,7 +28,7 @@ pub struct Simple2 {
 
 impl ComputeShader for Simple2 {
     fn shader() -> ShaderRef {
-        "basic.wgsl".into() // couold be different shader
+        "basic.wgsl".into() // could be different shader
     }
 }
 
@@ -48,11 +48,13 @@ fn main() {
             vec: vec![1.0, 2.0],
         })
         .add_systems(Startup, setup)
-        .add_systems(Update, (run_compute, log_change, close_on_esc))
+        .add_systems(Update, (trigger_compute, close_on_esc))
+        .add_systems(Update, compute_complete1.run_if(on_event::<ComputeComplete<Simple1>>()))
+        .add_systems(Update, compute_complete2.run_if(on_event::<ComputeComplete<Simple2>>()))
         .run();
 }
 
-fn run_compute(
+fn trigger_compute(
     keys: Res<Input<KeyCode>>,
     mut compute_1: EventWriter<ComputeEvent<Simple1>>,
     mut compute_2: EventWriter<ComputeEvent<Simple2>>,
@@ -67,13 +69,12 @@ fn run_compute(
     }
 }
 
-fn log_change( simple1: Res<Simple1>, simple2: Res<Simple2> ) {
-    if simple1.is_changed() {        
-        dbg!(&simple1);
-    }    
-    if simple2.is_changed() {        
-        dbg!(&simple2);
-    }    
+fn compute_complete1( simple1: Res<Simple1>) {
+    dbg!(&simple1);
+}
+
+fn compute_complete2( simple2: Res<Simple2>) {
+    dbg!(&simple2);
 }
 
 // Setup a simple 2D camera and text

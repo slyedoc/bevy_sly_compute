@@ -75,6 +75,14 @@ impl ComputePlugin {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(SystemSet)]
+enum ComputeSystems {
+    Prepare,
+    Main,
+    Cleanup
+}
+
 impl Plugin for ComputePlugin {
     fn build(&self, app: &mut App) {
         if app.is_plugin_added::<Self>() {
@@ -94,7 +102,17 @@ impl Plugin for ComputePlugin {
                     extract_compute_asset::<Image>, // ExtractSchedule
                     prepare_assets::<Image>, // AFTER::register_system( render_app, prepare_assets::<A>.in_set(RenderSet::PrepareAssets),
                 )
-                    .chain(),
+                    .chain().in_set(ComputeSystems::Prepare),
+            )
+            // TODO: find better way
+            // hack to mark ALL materials modified on image modified                        
+            .add_systems(Update, 
+                (   
+                    mark_shader_modified::<StandardMaterial>,
+                )
+                .run_if(on_event::<AssetEvent<Image>>())                
+                .in_set(ComputeSystems::Cleanup)
+                .after(ComputeSystems::Main)
             );
     }
 
@@ -114,12 +132,15 @@ impl Plugin for ComputePlugin {
     }
 }
 
-// fn setup(
-//     mut commands: Commands,
-//     render_device: Res<RenderDevice>,
-// ) {
-//     commands.insert_resource(AppPipelineCache::new(&render_device))
-// }
+// Hack to mark shader modified on image modified
+pub fn mark_shader_modified<R: Asset>(    
+    mut assets: ResMut<Assets<R>>,
+) {
+    let ids = assets.ids().collect::<Vec<_>>();
+    for id in ids {        
+        assets.queued_events.push(AssetEvent::Modified { id });
+    }
+}
 
 // All Copies from bevy::render::render_resource
 

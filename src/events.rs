@@ -99,8 +99,3 @@ impl ComputePass {
     }
 }
 
-#[cfg(feature = "egui")]
-#[derive(Event, Debug, Clone)]
-pub struct ComputeUpdateEgui {
-    pub handle: Handle<Image>,    
-}

@@ -4,7 +4,7 @@ use bevy::{
     asset::load_internal_asset, pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{mesh::Indices, render_resource::*, texture::TextureFormatPixelInfo}, window::{close_on_esc, PrimaryWindow}
 };
 use bevy_inspector_egui::{
-    bevy_egui::{EguiContext, EguiPlugin},
+    bevy_egui::{self, EguiContext, EguiContexts, EguiPlugin},
     bevy_inspector, egui,
     inspector_options::std_options::NumberDisplay,
     prelude::*,
@@ -33,7 +33,7 @@ fn main() {
         WireframePlugin, // Debuging wireframe
         PanOrbitCameraPlugin, // Camera control        
         ComputeWorkerPlugin::<Terrain>::default(), // Our compute Plugin
-        SimpleInspectorPlugin, // Custom inspector below
+        TerrainInspectorPlugin, // Custom inspector below
     ))
     .init_resource::<Terrain>()
     .register_type::<Terrain>()
@@ -58,11 +58,17 @@ fn main() {
         Update,
         toggle_wireframe.run_if(action_just_pressed(AppAction::ToggleWireframe)),
     )
-    .add_systems(Last, process_terrain.run_if(on_event::<ComputeComplete<Terrain>>()));
-
+    .add_systems(Last, process_terrain.run_if(on_event::<ComputeComplete<Terrain>>()))
+    // helper to not move the mouse when over egui window
+    .add_systems(
+        PreUpdate,
+        (absorb_egui_inputs)
+                .after(bevy_egui::systems::process_input_system)
+                .before(bevy_egui::EguiSet::BeginFrame),
+    );
 
     // loading internal asset, like editing files side by side
-    load_internal_asset!(app, SHADER_HANDLE, "inspect.wgsl", Shader::from_wgsl);
+    load_internal_asset!(app, SHADER_HANDLE, "terrain.wgsl", Shader::from_wgsl);
 
     app.run();
 }
@@ -94,6 +100,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    terrain: Res<Terrain>,
 ) {
     commands.spawn((
         Camera3dBundle {
@@ -109,15 +116,17 @@ fn setup(
         ..Default::default()
     });
 
+    // setup our terrain using image
     commands.spawn((
         PbrBundle {
+            // mesh will be updated by process_terrain
             mesh: meshes.add(Mesh::from(shape::Plane {
                 size: 20.0,
                 subdivisions: 10,
             })),
             material: materials.add(StandardMaterial {
-                base_color: Color::rgb(0.5, 0.5, 0.5),
-                metallic: 0.0,
+                // image will be updated by process_terrain
+                base_color_texture: Some(terrain.image.clone()),
                 ..Default::default()
             }),
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
@@ -133,17 +142,13 @@ fn setup(
 fn process_terrain(
     terrain: Res<Terrain>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut images: ResMut<Assets<Image>>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
-    mut query: Query<(&mut Handle<Mesh>, &mut Collider, &Handle<StandardMaterial>), With<Ground>>,
+    mut images: ResMut<Assets<Image>>,    
+    mut query: Query<(&mut Handle<Mesh>, &mut Collider), With<Ground>>,
 ) {
-    let Ok((mut mesh_handle, mut collider, material_handle)) = query.get_single_mut() else {
+    let Ok((mut mesh_handle, mut collider)) = query.get_single_mut() else {
         warn!("update terrain failed, no ground found");
         return;
     };
-    
-    // flag material as modified
-    let _ = standard_materials.get_mut(material_handle);
 
     // update mesh
     *mesh_handle = meshes.add(terrain.generate_mesh(&mut images));
@@ -271,33 +276,25 @@ impl Terrain {
         mesh.duplicate_vertices();
         mesh.compute_flat_normals();
 
-        // match self.mesh_mode {
-        //     TerrainMeshMode::Flat => {
-        //         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-        //         mesh.duplicate_vertices();
-        //         mesh.compute_flat_normals();
-        //     }
-        //     TerrainMeshMode::Smooth => {
-        //         let mut normals: Vec<[f32; 3]> = Vec::with_capacity(num_vertices);
-        //         for y in 0..size {
-        //             for x in 0..size {
-        //                 let pos: Vec3 = positions[(y * size + x) as usize].into();
-        //                 if x < size - 1 && y < size - 1 {
-        //                     let pos_right: Vec3 = positions[(y * size + x + 1) as usize].into();
-        //                     let pos_up: Vec3 = positions[((y + 1) * size + x) as usize].into();
-        //                     let tangent1 = pos_right - pos;
-        //                     let tangent2 = pos_up - pos;
-        //                     let normal = tangent2.cross(tangent1);
-        //                     normals.push(normal.normalize().into());
-        //                 } else {
-        //                     normals.push(Vec3::Y.into());
-        //                 }
-        //             }
+        // Smooth
+        // let mut normals: Vec<[f32; 3]> = Vec::with_capacity(num_vertices);
+        // for y in 0..size {
+        //     for x in 0..size {
+        //         let pos: Vec3 = positions[(y * size + x) as usize].into();
+        //         if x < size - 1 && y < size - 1 {
+        //             let pos_right: Vec3 = positions[(y * size + x + 1) as usize].into();
+        //             let pos_up: Vec3 = positions[((y + 1) * size + x) as usize].into();
+        //             let tangent1 = pos_right - pos;
+        //             let tangent2 = pos_up - pos;
+        //             let normal = tangent2.cross(tangent1);
+        //             normals.push(normal.normalize().into());
+        //         } else {
+        //             normals.push(Vec3::Y.into());
         //         }
-        //         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-        //         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
         //     }
         // }
+        // mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        // mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
 
         mesh
     }
@@ -342,9 +339,9 @@ impl ComputeShader for Terrain {
 // This is not ideal in a example
 // but small window size from ResourceInspectorPlugin was driving me nuts
 // also added button to trigger compute
-struct SimpleInspectorPlugin;
+struct TerrainInspectorPlugin;
 
-impl Plugin for SimpleInspectorPlugin {
+impl Plugin for TerrainInspectorPlugin {
     fn build(&self, app: &mut App) {
         if !app.is_plugin_added::<DefaultInspectorConfigPlugin>() {
             app.add_plugins(DefaultInspectorConfigPlugin);
@@ -353,11 +350,11 @@ impl Plugin for SimpleInspectorPlugin {
             app.add_plugins(EguiPlugin);
         }
 
-        app.add_systems(Update, simple_inspector_ui);
+        app.add_systems(Update, terrain_inspector_ui);
     }
 }
 
-fn simple_inspector_ui(world: &mut World) {
+fn terrain_inspector_ui(world: &mut World) {
     let egui_context = world
         .query_filtered::<&mut EguiContext, With<PrimaryWindow>>()
         .get_single(world);
@@ -367,7 +364,7 @@ fn simple_inspector_ui(world: &mut World) {
     };
     let mut egui_context = egui_context.clone();
 
-    egui::Window::new("Simple")
+    egui::Window::new("Terrain")
         .default_size((200., 500.))
         .show(egui_context.get_mut(), |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
@@ -378,3 +375,9 @@ fn simple_inspector_ui(world: &mut World) {
 }
 
 
+// helper fuction to not move the mouse when over egui window
+fn absorb_egui_inputs(mut mouse: ResMut<Input<MouseButton>>, mut contexts: EguiContexts) {
+    if contexts.ctx_mut().is_pointer_over_area() {
+        mouse.reset_all();
+    }
+}

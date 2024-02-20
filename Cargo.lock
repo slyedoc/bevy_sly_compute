@@ -352,7 +352,7 @@ checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 [[package]]
 name = "bevy"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_internal",
 ]
@@ -360,7 +360,7 @@ dependencies = [
 [[package]]
 name = "bevy-inspector-egui"
 version = "0.22.1"
-source = "git+https://github.com/slyedoc/bevy-inspector-egui.git?branch=image-format#e955c6219e303f3bd34ec7645e2a887e96a3e810"
+source = "git+https://github.com/slyedoc/bevy-inspector-egui.git?branch=image-format#a325e4fa86df12a161d4253d1661372780beec6a"
 dependencies = [
  "bevy-inspector-egui-derive",
  "bevy_app",
@@ -388,7 +388,7 @@ dependencies = [
 [[package]]
 name = "bevy-inspector-egui-derive"
 version = "0.22.0"
-source = "git+https://github.com/slyedoc/bevy-inspector-egui.git?branch=image-format#e955c6219e303f3bd34ec7645e2a887e96a3e810"
+source = "git+https://github.com/slyedoc/bevy-inspector-egui.git?branch=image-format#a325e4fa86df12a161d4253d1661372780beec6a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -398,7 +398,7 @@ dependencies = [
 [[package]]
 name = "bevy_a11y"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "accesskit",
  "bevy_app",
@@ -409,7 +409,7 @@ dependencies = [
 [[package]]
 name = "bevy_animation"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_asset",
@@ -427,7 +427,7 @@ dependencies = [
 [[package]]
 name = "bevy_app"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_derive",
  "bevy_ecs",
@@ -442,7 +442,7 @@ dependencies = [
 [[package]]
 name = "bevy_asset"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "async-broadcast",
  "async-fs",
@@ -473,7 +473,7 @@ dependencies = [
 [[package]]
 name = "bevy_asset_macros"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_macro_utils",
  "proc-macro2",
@@ -484,7 +484,7 @@ dependencies = [
 [[package]]
 name = "bevy_audio"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_asset",
@@ -501,7 +501,7 @@ dependencies = [
 [[package]]
 name = "bevy_core"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -516,7 +516,7 @@ dependencies = [
 [[package]]
 name = "bevy_core_pipeline"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_asset",
@@ -537,7 +537,7 @@ dependencies = [
 [[package]]
 name = "bevy_derive"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_macro_utils",
  "quote",
@@ -547,7 +547,7 @@ dependencies = [
 [[package]]
 name = "bevy_diagnostic"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_core",
@@ -571,7 +571,7 @@ dependencies = [
 [[package]]
 name = "bevy_ecs"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "async-channel 1.9.0",
  "bevy_ecs_macros",
@@ -591,7 +591,7 @@ dependencies = [
 [[package]]
 name = "bevy_ecs_macros"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_macro_utils",
  "proc-macro2",
@@ -615,7 +615,7 @@ dependencies = [
 [[package]]
 name = "bevy_encase_derive"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_macro_utils",
  "encase_derive_impl",
@@ -624,7 +624,7 @@ dependencies = [
 [[package]]
 name = "bevy_gilrs"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -639,7 +639,7 @@ dependencies = [
 [[package]]
 name = "bevy_gizmos"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_asset",
@@ -658,7 +658,7 @@ dependencies = [
 [[package]]
 name = "bevy_gltf"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "base64 0.13.1",
  "bevy_animation",
@@ -687,7 +687,7 @@ dependencies = [
 [[package]]
 name = "bevy_hierarchy"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_core",
@@ -701,7 +701,7 @@ dependencies = [
 [[package]]
 name = "bevy_input"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -715,7 +715,7 @@ dependencies = [
 [[package]]
 name = "bevy_internal"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_a11y",
  "bevy_animation",
@@ -753,7 +753,7 @@ dependencies = [
 [[package]]
 name = "bevy_log"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "android_log-sys",
  "bevy_app",
@@ -768,7 +768,7 @@ dependencies = [
 [[package]]
 name = "bevy_macro_utils"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -780,7 +780,7 @@ dependencies = [
 [[package]]
 name = "bevy_math"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "glam",
  "serde",
@@ -789,7 +789,7 @@ dependencies = [
 [[package]]
 name = "bevy_mikktspace"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "glam",
 ]
@@ -807,7 +807,7 @@ dependencies = [
 [[package]]
 name = "bevy_pbr"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_asset",
@@ -832,12 +832,12 @@ dependencies = [
 [[package]]
 name = "bevy_ptr"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 
 [[package]]
 name = "bevy_reflect"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_math",
  "bevy_ptr",
@@ -855,7 +855,7 @@ dependencies = [
 [[package]]
 name = "bevy_reflect_derive"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_macro_utils",
  "proc-macro2",
@@ -867,7 +867,7 @@ dependencies = [
 [[package]]
 name = "bevy_render"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "async-channel 1.9.0",
  "bevy_app",
@@ -912,7 +912,7 @@ dependencies = [
 [[package]]
 name = "bevy_render_macros"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_macro_utils",
  "proc-macro2",
@@ -923,7 +923,7 @@ dependencies = [
 [[package]]
 name = "bevy_scene"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_asset",
@@ -973,7 +973,7 @@ dependencies = [
 [[package]]
 name = "bevy_sprite"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_asset",
@@ -998,7 +998,7 @@ dependencies = [
 [[package]]
 name = "bevy_tasks"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "async-channel 1.9.0",
  "async-executor",
@@ -1011,7 +1011,7 @@ dependencies = [
 [[package]]
 name = "bevy_text"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "ab_glyph",
  "bevy_app",
@@ -1032,7 +1032,7 @@ dependencies = [
 [[package]]
 name = "bevy_time"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -1046,7 +1046,7 @@ dependencies = [
 [[package]]
 name = "bevy_transform"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -1060,7 +1060,7 @@ dependencies = [
 [[package]]
 name = "bevy_ui"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_a11y",
  "bevy_app",
@@ -1089,7 +1089,7 @@ dependencies = [
 [[package]]
 name = "bevy_utils"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "ahash",
  "bevy_utils_proc_macros",
@@ -1106,7 +1106,7 @@ dependencies = [
 [[package]]
 name = "bevy_utils_proc_macros"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1116,7 +1116,7 @@ dependencies = [
 [[package]]
 name = "bevy_window"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "bevy_a11y",
  "bevy_app",
@@ -1132,7 +1132,7 @@ dependencies = [
 [[package]]
 name = "bevy_winit"
 version = "0.12.1"
-source = "git+https://github.com/slyedoc/bevy.git?branch=texture#70adabcd1295e13504ce02b54109ae85dcd43f9e"
+source = "git+https://github.com/slyedoc/bevy.git?branch=texture#09b395a0784f1d1d71163b84af75992d4e95f5b7"
 dependencies = [
  "accesskit_winit",
  "approx",
@@ -1287,9 +1287,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.15.0"
+version = "3.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d32a994c2b3ca201d9b263612a374263f05e7adde37c4707f693dcd375076d1f"
+checksum = "c764d619ca78fccbf3069b37bd7af92577f044bb15236036662d79b6559f25b7"
 
 [[package]]
 name = "bytemuck"
