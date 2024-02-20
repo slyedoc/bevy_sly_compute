@@ -50,11 +50,10 @@ fn update_egui_textures(
     for event in compute_events.read() {
 
         let id = contexts.image_id(&event.handle);
-        
+
 
         match id {
-            Some(id) => {
-                .
+            Some(id) => {                
                 contexts.remove_image(&event.handle);
                 let id2 = contexts.add_image(event.handle.clone());
                 info!("update_egui_textures: {:?} {:?}", id, id2);
