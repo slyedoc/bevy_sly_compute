@@ -2,11 +2,11 @@
 
 Plugin aims to provide easy way access data created or modified on the GPU, back in app world.
 
-> This is a hack, but will work for my needs.  From this I do think I understand the problem better.  Now repo is mainly me exploring bevy, rust macros and wgpu.
+> This is a hack job, just enough to get it work, but will work for my needs.  Now repo is mainly me exploring bevy, rust macros and wgpu.
 
 An ideal solution would most likely be a PR to bevy:
 
-- No Compute World, stay in render world, worthless without long running compute tasks, and not possable in wgpu currently (find Issue for this) and no texture duplication issues.
+- No Compute World, stay in render world, (worthless without long running compute tasks, and not possable in wgpu currently (find Issue for this)) and no texture duplication issues.
 - Extend AsBindGroup to create staging buffers (similar to this repo)
 - In cleanup, map staging buffers back to render world resource, then send an event or just storing in a resource (resources are retained in render world)
 - _ReverseExtract_ Phase or Events to move data back to app world.
@@ -26,19 +26,21 @@ See [PR #8440](https://github.com/bevyengine/bevy/issues/8440)
 - [ ] Data:
   - [ ] Uniform
   - [x] Storage
-  - [ ] Storage Texture - **WIP**
+  - [x] Storage Texture  
   - [ ] Buffer  
 - Examples:
   - [x] Basic
-  - [ ] Inspect **WIP**
-  - [ ] Image **WIP**
+  - [x] Inspect
+  - [x] Image  
   - [ ] [AsBindGroupShaderType] (https:///github.com/bevyengine/bevy/crates/bevy_sprite/src/mesh2d/color_material.rs)
   - [x] Many - Multiple ComputeWorkerPlugins
+- [ ] AssetEvent::Modified
+  - [x] Egui Inspector - added patch to bevy-inspector-egui to clear resized images on asset modified events
+  - [ ] StandardMaterial - Currently have mark material as modified
   [AsBindGroupShaderType]
 - [ ] Instancing
   - How about a pass per entity?
 - [ ] Go over macro - Right now I have just been adding what I need as I need it
-- [ ] Use OwnedBindingResource
 - [x] Multiple Entry Points
 - [x] Multiple Passes
 - [x] Many Plugin Instances
@@ -56,7 +58,7 @@ Only differences so far are:
 - storage - 'staging' - have resource updated after compute
   - ```Vec<T>``` works if ```T: Pod```, Color doesn't work
   - TODO: Look into encase ReadFrom and WriteTo
-- storage_texture - 'staging' - image transfer after compute and ```Assets<Image>``` updated
+- storage_texture - 'staging' - image transfered after compute and ```Assets<Image>``` updated with AssetModified event
 - buffer - TODO
 
 > Would love to take to someone that has more knowledge in what would be ideal for this.
@@ -71,7 +73,7 @@ Require patches currently:
     - This will come in 0.13, but would affect this plugin.
 - bevy-inspector-egui
   - add few image formats, I should put in a PR
-
+  - added asset_image_modified system to clear resized images on asset modified events
 - See [Cargo.toml](Cargo.toml) patch section.
 
 ## Examples
@@ -149,13 +151,13 @@ Use can events to execute compute shader.
   });
 ```
 
-Use change tracking to see when to see new values (Should this be event as well?)
+Use events to see data is changed.
 
 ```rust
-fn log_change( simple: Res<Simple> ) {
-    if simple.is_changed() {        
-        dbg!(&simple);
-    }    
+.add_systems(Last, compute_complete.run_if(on_event::<ComputeComplete<Simple>>()))
+...
+fn compute_complete( simple: Res<Simple> ) {
+    dbg!(&simple);
 }
 ```
 

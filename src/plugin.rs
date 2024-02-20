@@ -19,7 +19,7 @@ use bytemuck::{bytes_of, cast_slice, from_bytes, AnyBitPattern, NoUninit};
 use wgpu::{BindGroupEntry, CommandEncoder, CommandEncoderDescriptor, ComputePassDescriptor};
 
 use crate::{
-    error::{Error, Result}, events::*, pipeline_cache::{AppPipelineCache, CachedAppComputePipelineId}, ComputeAssets, ComputeEvent, ComputePlugin, ComputeShader, ComputeTrait, ComputeUpdateEgui, RequeueComputeEvent, StageBindGroup
+    error::{Error, Result}, events::*, pipeline_cache::{AppPipelineCache, CachedAppComputePipelineId}, ComputeAssets, ComputeEvent, ComputePlugin, ComputeShader, ComputeTrait, RequeueComputeEvent, StageBindGroup
 };
 
 use crate::AsBindGroupCompute;
@@ -72,8 +72,8 @@ fn run<T: ComputeTrait>(
     mut events: EventReader<ComputeEvent<T>>,
     mut requeue_events: EventWriter<RequeueComputeEvent<T>>,
     mut complete_events: EventWriter<ComputeComplete<T>>,
-    #[cfg(feature = "egui")]
-    mut egui_events: EventWriter<ComputeUpdateEgui>,
+    mut asset_event: EventWriter<AssetEvent<Image>>,
+
     worker: Res<ComputeWorker<T>>,
     mut data: ResMut<T>,
     pipeline_cache: Res<AppPipelineCache>,
@@ -106,11 +106,16 @@ fn run<T: ComputeTrait>(
             &gpu_images,
             &fallback_image,
         ) else {
-            requeue_events.send(RequeueComputeEvent {
-                passes: event.passes.clone(),
-                _marker: Default::default(),
-            });
-            error!("failed to prepare compute worker bind group");
+            if event.retry > 3 {
+                error!("failed to prepare compute worker bind group, retry limit reached");
+            }
+            else {
+                requeue_events.send(RequeueComputeEvent {
+                    passes: event.passes.clone(),
+                    retry: event.retry + 1,
+                    _marker: Default::default(),
+                });
+            }
             return;
         };
 
@@ -277,19 +282,19 @@ fn run<T: ComputeTrait>(
             // this doesnt work
             image.data = unpadded_data;
 
-            #[cfg(feature = "egui")]
-            // egui doesnt watch for changes to asset image
-            // so we need to remove it, and it will be add back
-            // with new data
-            egui_events.send(ComputeUpdateEgui {
-                handle: handle.clone_weak(),
+            // notify asset event
+            asset_event.send(AssetEvent::Modified {
+                id: handle.id(),
             });
-
-            //buffer.unmap();
         }
 
         drop(storage_buffer_slices);
+        drop(image_buffer_slices);
+
         storage_buffers.iter().for_each(|(_, buffer)| {
+            buffer.unmap();
+        });
+        stage_image.iter().for_each(|(_, buffer, _)| {
             buffer.unmap();
         });
 

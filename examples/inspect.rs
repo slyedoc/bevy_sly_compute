@@ -1,7 +1,7 @@
 // Example with egui inspector
 
 use bevy::{
-    asset::load_internal_asset, ecs::{event, system::Command}, pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{mesh::Indices, render_resource::*, texture::TextureFormatPixelInfo}, window::{close_on_esc, PrimaryWindow}
+    asset::load_internal_asset, pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{mesh::Indices, render_resource::*, texture::TextureFormatPixelInfo}, window::{close_on_esc, PrimaryWindow}
 };
 use bevy_inspector_egui::{
     bevy_egui::{EguiContext, EguiPlugin},
@@ -41,8 +41,6 @@ fn main() {
         global: false,
         default_color: Color::WHITE,
     })
-    
-
     // actions
     .init_resource::<ActionState<AppAction>>()
     .insert_resource(
@@ -71,14 +69,8 @@ fn main() {
 
 // helper to trigger compute passes of the correct size
 fn trigger_computue(    
-    terrain: Res<Terrain>,
     mut compute_terrain: EventWriter<ComputeEvent<Terrain>>,
-) {
-    // TODO: dynamic image size in terrain?
-    if terrain.is_added() {
-        return;
-    }
-    
+) {   
     compute_terrain.send(ComputeEvent::<Terrain> {
         passes: vec![
             ComputePass {
@@ -149,13 +141,9 @@ fn process_terrain(
         warn!("update terrain failed, no ground found");
         return;
     };
-    let Some(mat) = standard_materials.get_mut(material_handle) else {
-        warn!("update terrain failed, no material found");
-        return;
-    };
-
-    // update material
-    mat.base_color_texture = Some(terrain.image.clone());
+    
+    // flag material as modified
+    let _ = standard_materials.get_mut(material_handle);
 
     // update mesh
     *mesh_handle = meshes.add(terrain.generate_mesh(&mut images));
@@ -171,7 +159,7 @@ fn toggle_wireframe(mut wireframe_config: ResMut<WireframeConfig>) {
 #[derive(Reflect, AsBindGroupCompute, Resource, Clone, InspectorOptions)]
 #[reflect(Resource, InspectorOptions)]
 pub struct Terrain {
-    #[uniform(0, read_only, visibility = "compute")]
+    #[uniform(0)]
     #[inspector(min = 0.0, max = 10.0, display = NumberDisplay::Slider)]
     scale: f32,
     
@@ -384,15 +372,6 @@ fn simple_inspector_ui(world: &mut World) {
         .show(egui_context.get_mut(), |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
                 bevy_inspector::ui_for_resource::<Terrain>(world, ui);
-                // Button that span the window
-                // let button_size = egui::vec2(ui.available_width(), 30.0); // Set the desired height to 30.0 or any value you prefer
-                // if ui
-                //     .add_sized(button_size, egui::Button::new("Run Compute"))
-                //     .clicked()
-                // {
-                //      world.send_event(UpdateTerrain);
-                // }
-
                 ui.allocate_space(ui.available_size());
             });
         });

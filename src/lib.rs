@@ -1,7 +1,4 @@
 mod traits;
-use std::mem;
-
-use bevy_inspector_egui::bevy_egui::EguiContexts;
 pub use traits::*;
 
 mod plugin;
@@ -30,40 +27,7 @@ use bevy::{
     },
     utils::HashSet,
 };
-
-/// This is a helper that will update egui textures when an image is updated
-pub struct ComputeEguiPlugin;
-
-impl Plugin for ComputeEguiPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<ComputeUpdateEgui>().add_systems(
-            Update,
-            update_egui_textures.run_if(on_event::<ComputeUpdateEgui>()),
-        );
-    }
-}
-
-fn update_egui_textures(
-    mut compute_events: EventReader<ComputeUpdateEgui>,
-    mut contexts: EguiContexts,
-) {
-    for event in compute_events.read() {
-
-        let id = contexts.image_id(&event.handle);
-
-
-        match id {
-            Some(id) => {                
-                contexts.remove_image(&event.handle);
-                let id2 = contexts.add_image(event.handle.clone());
-                info!("update_egui_textures: {:?} {:?}", id, id2);
-            }
-            None => {
-
-            }
-        }
-    }
-}
+use std::mem;
 
 /// Helper module to import most used elements.
 pub mod prelude {
@@ -116,14 +80,6 @@ impl Plugin for ComputePlugin {
         if app.is_plugin_added::<Self>() {
             return;
         }
-
-        // update egui textures
-        #[cfg(feature = "egui")]
-        app.add_event::<ComputeUpdateEgui>()
-            .add_systems(
-                Update,
-                update_egui_textures.run_if(on_event::<ComputeUpdateEgui>()),
-            );
 
         // recreate render assets in app world
         app.init_resource::<ComputeAssets<Image>>()

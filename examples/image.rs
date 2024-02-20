@@ -6,28 +6,32 @@ use bevy::{
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use bevy_sly_compute::prelude::*;
 use bevy_inspector_egui::{
-    inspector_options::std_options::NumberDisplay, prelude::*, quick::ResourceInspectorPlugin
+    bevy_egui::{self, EguiContexts}, prelude::*, quick::ResourceInspectorPlugin
 };
 
-const TEXTURE_SIZE: u32 = 512;
-const WORKGROUP_SIZE: u32 = 8;
+const TEXTURE_SIZE: u32 = 1024;
+const WORKGROUP_SIZE: u32 = 8; // should match shader
 
 fn main() {
     App::new()
     .add_plugins((
         DefaultPlugins,
         PanOrbitCameraPlugin, // Camera control      
-        ComputeWorkerPlugin::<Simple>::default(),                 
-        ResourceInspectorPlugin::<Simple>::default(),
+        ComputeWorkerPlugin::<Simple>::default(), // our compute plugin                
+        ResourceInspectorPlugin::<Simple>::default(), // inspector for Simple
     ))
-    //.add_plugins()
     .init_resource::<Simple>()
     .register_type::<Simple>()
-    
     .add_systems(Startup, setup)
     .add_systems(Update, trigger_computue.run_if(resource_changed::<Simple>()) )
-    .add_systems(Last, process_terrain.run_if(on_event::<ComputeComplete<Simple>>()))
+    .add_systems(Last, process_image.run_if(on_event::<ComputeComplete<Simple>>()))
     .add_systems(Update, close_on_esc)
+    .add_systems(
+        PreUpdate,
+        (absorb_egui_inputs)
+                .after(bevy_egui::systems::process_input_system)
+                .before(bevy_egui::EguiSet::BeginFrame),
+    )
     .run();
 }
 
@@ -35,19 +39,15 @@ fn main() {
 #[derive(Reflect, AsBindGroupCompute, Resource, Clone, InspectorOptions)]
 #[reflect(Resource, InspectorOptions)]
 pub struct Simple {
-
-    #[inspector(min = 0.0, max = 10.0, display = NumberDisplay::Slider)]
-    #[uniform(0)]
-    fill: f32,
     
     // TODO: min max not working
-    #[uniform(1, min = 0.0, max = 1.0, display = NumberDisplay::Slider)] 
+    #[uniform(0, min = 0.0, max = 1.0, display = NumberDisplay::Slider)] 
     offset_x: f32,
 
-    #[uniform(2, min = 0.0, max = 1.0, display = NumberDisplay::Slider)]
+    #[uniform(1, min = 0.0, max = 1.0, display = NumberDisplay::Slider)]
     offset_y: f32,
 
-    #[storage_texture(3, image_format = Rgba8Unorm, access = ReadWrite, staging)]
+    #[storage_texture(2, image_format = Rgba8Unorm, access = ReadWrite, staging)]
     pub image: Handle<Image>,    
 }
 
@@ -72,7 +72,6 @@ impl FromWorld for Simple {
         let image_handle = images.add(image);
 
         Self {
-            fill: 0.5,
             offset_x: -0.5,
             offset_y: -0.5,
             image: image_handle,
@@ -89,7 +88,6 @@ impl ComputeShader for Simple {
         vec!["main"]
     }
 }
-
 
 // helper to trigger compute passes of the correct size
 fn trigger_computue(    
@@ -122,8 +120,9 @@ fn setup(
     simple: Res<Simple>,
     mut ambient_light: ResMut<AmbientLight>,
 ) {
-
+    // disable the default light
     ambient_light.brightness = 0.0;
+
     commands.spawn((
         Camera3dBundle {
             transform: Transform::from_translation(Vec3::new(0.0, 10.0, 10.0))
@@ -134,11 +133,6 @@ fn setup(
         
         PanOrbitCamera::default(),
     ));
-
-    // commands.spawn(DirectionalLightBundle {
-    //     transform: Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_4)),
-    //     ..Default::default()
-    // });
 
     commands.spawn((
         PbrBundle {
@@ -159,20 +153,24 @@ fn setup(
     )); 
 }
 
-fn process_terrain(
-    terrain: Res<Simple>,
-    // mut meshes: ResMut<Assets<Mesh>>,
-    // mut images: ResMut<Assets<Image>>,
+
+// this fires after the compute shader has run and the texture has been updated
+// and AssetEvent<Image>::Modified { id } for the Image has been sent
+// Issue is the material does not get updated form that, and we
+// need to trigger AssetEvent<StandardMaterial>::Modified { id } for the material
+fn process_image(
     mut standard_materials: ResMut<Assets<StandardMaterial>>,
     mut query: Query<&Handle<StandardMaterial>, With<Target>>,
 ) {
-    info!("compute complete");
+    // Shouldnt need to do this
     let material_handle = query.single_mut();
-    let Some(mat) = standard_materials.get_mut(material_handle) else {
-        warn!("update terrain failed, no material found");
-        return;
-    };
+    let _ = standard_materials.get_mut(material_handle);
+}
 
-    // TODO: Shouldn't need to do this, need to some how flag Image as changed
-    mat.base_color_texture = Some(terrain.image.clone());
+
+// helper fuction to not move the mouse when over egui window
+fn absorb_egui_inputs(mut mouse: ResMut<Input<MouseButton>>, mut contexts: EguiContexts) {
+    if contexts.ctx_mut().is_pointer_over_area() {
+        mouse.reset_all();
+    }
 }

@@ -4,11 +4,6 @@ use bevy::prelude::*;
 
 use crate::ComputeTrait;
 
-#[derive(Event, Clone)]
-pub struct ComputeEvent<T: ComputeTrait> {
-    pub passes: Vec<ComputePass>,
-    pub _marker: PhantomData<T>,
-}
 
 #[derive(Event)]
 pub struct ComputeComplete<T: ComputeTrait> {    
@@ -27,6 +22,14 @@ impl<T: ComputeTrait> Default for ComputeComplete<T> {
 #[derive(Event, Clone)]
 pub struct RequeueComputeEvent<T: ComputeTrait> {
     pub passes: Vec<ComputePass>,
+    pub retry: u32,
+    pub _marker: PhantomData<T>,
+}
+
+#[derive(Event, Clone)]
+pub struct ComputeEvent<T: ComputeTrait> {
+    pub passes: Vec<ComputePass>,
+    pub retry: u32,
     pub _marker: PhantomData<T>,
 }
 
@@ -38,6 +41,7 @@ impl<T: ComputeTrait> Default for ComputeEvent<T> {
                 entry: T::entry_points().first().expect("no entry points"),
                 workgroups: vec![UVec3::new(1, 1, 1)],
             }], 
+            retry: 0,
             _marker: Default::default()
          }
     }
@@ -52,6 +56,7 @@ impl<T: ComputeTrait> ComputeEvent<T> {
                     workgroups: vec![workgroups],
                 }
             ],
+            retry: 0,
             _marker: Default::default(),
         }
     }
@@ -64,6 +69,7 @@ impl<T: ComputeTrait> ComputeEvent<T> {
                     workgroups: vec![UVec3::new(x, y, z)],
                 }
             ],
+            retry: 0,
             _marker: Default::default(),
         }
     }
