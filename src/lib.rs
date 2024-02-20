@@ -1,6 +1,7 @@
 mod traits;
 use std::mem;
 
+use bevy_inspector_egui::bevy_egui::EguiContexts;
 pub use traits::*;
 
 mod plugin;
@@ -8,6 +9,9 @@ pub use plugin::*;
 
 mod error;
 pub use error::*;
+
+mod events;
+pub use events::*;
 
 mod pipeline_cache;
 pub use pipeline_cache::*;
@@ -17,7 +21,7 @@ use bevy::{
     prelude::*,
     render::{
         render_asset::{PrepareAssetError, RenderAsset, RenderAssets},
-        render_resource::{CachedPipelineState, PipelineCacheError, Sampler},
+        render_resource::*,
         renderer::RenderDevice,
         texture::{
             DefaultImageSampler, FallbackImage, FallbackImageCubemap, FallbackImageFormatMsaaCache,
@@ -27,13 +31,49 @@ use bevy::{
     utils::HashSet,
 };
 
+/// This is a helper that will update egui textures when an image is updated
+pub struct ComputeEguiPlugin;
+
+impl Plugin for ComputeEguiPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<ComputeUpdateEgui>().add_systems(
+            Update,
+            update_egui_textures.run_if(on_event::<ComputeUpdateEgui>()),
+        );
+    }
+}
+
+fn update_egui_textures(
+    mut compute_events: EventReader<ComputeUpdateEgui>,
+    mut contexts: EguiContexts,
+) {
+    for event in compute_events.read() {
+
+        let id = contexts.image_id(&event.handle);
+        
+
+        match id {
+            Some(id) => {
+                .
+                contexts.remove_image(&event.handle);
+                let id2 = contexts.add_image(event.handle.clone());
+                info!("update_egui_textures: {:?} {:?}", id, id2);
+            }
+            None => {
+
+            }
+        }
+    }
+}
+
 /// Helper module to import most used elements.
 pub mod prelude {
     pub use crate::{
+        events::{ComputePass, *},
         pipeline_cache::{AppPipelineCache, CachedAppComputePipelineId},
         plugin::*,
-        traits::AsBindGroupCompute,
-        ComputeAssets, ComputePlugin, ComputeShader,
+        traits::*,
+        ComputeAssets, ComputePlugin,
     };
     pub use bevy_sly_compute_macros::AsBindGroupCompute;
     // Since these are always used when using this crate
@@ -78,6 +118,14 @@ impl Plugin for ComputePlugin {
             return;
         }
 
+        // update egui textures
+        #[cfg(feature = "egui")]
+        app.add_event::<ComputeUpdateEgui>()
+            .add_systems(
+                Update,
+                update_egui_textures.run_if(on_event::<ComputeUpdateEgui>()),
+            );
+
         // recreate render assets in app world
         app.init_resource::<ComputeAssets<Image>>()
             .init_resource::<ComputeExtractedAssets<Image>>()
@@ -118,6 +166,8 @@ impl Plugin for ComputePlugin {
 //     commands.insert_resource(AppPipelineCache::new(&render_device))
 // }
 
+// All Copies from bevy::render::render_resource
+
 #[derive(Resource, Debug, Clone, Deref, DerefMut)]
 pub struct ComputeDefaultImageSampler(pub Sampler);
 
@@ -130,6 +180,13 @@ pub struct ComputeAssets<A: RenderAsset>(pub RenderAssets<A>);
 pub struct ComputeExtractedAssets<A: RenderAsset> {
     extracted: Vec<(AssetId<A>, A::ExtractedAsset)>,
     removed: Vec<AssetId<A>>,
+}
+
+// This is where our types begin
+
+pub struct StageBindGroup {
+    pub storage: Vec<(u32, Buffer)>,
+    pub handles: Vec<Handle<Image>>,
 }
 
 // TODO: not sure I need this

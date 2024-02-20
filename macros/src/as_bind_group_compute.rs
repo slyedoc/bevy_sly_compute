@@ -41,6 +41,7 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
     let mut binding_impls = Vec::new();
     let mut staging_storage_impls = Vec::new();
     let mut staging_mappings = Vec::new();
+    let mut staging_handles = Vec::new();
     let mut binding_layouts = Vec::new();
     let mut attr_prepared_data_ident = None;
 
@@ -243,6 +244,7 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
                             )
                         }});
 
+                        // Add staging buffers for Storage
                         if staging {
                             let size = match is_vec_type(&field.ty) {
                                 Some(t) => quote! { self.#field_name.len() as u64 * <#t as bevy::render::render_resource::ShaderType>::min_size().get() },
@@ -251,21 +253,22 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
 
                             staging_storage_impls.push(quote! {
                                 (
-                                    #binding_index,
-                                    Some(bevy::render::render_resource::OwnedBindingResource::Buffer(render_device.create_buffer(&bevy::render::render_resource::BufferDescriptor {
+                                    #binding_index,                                    
+                                    render_device.create_buffer(&bevy::render::render_resource::BufferDescriptor {
                                         label: None,
-                                        usage: bevy::render::render_resource::BufferUsages::MAP_READ
-                                            | bevy::render::render_resource::BufferUsages::COPY_DST,  
+                                        usage: bevy::render::render_resource::BufferUsages::COPY_DST
+                                            | bevy::render::render_resource::BufferUsages::MAP_READ,
                                         size: #size,
                                         mapped_at_creation: false,
-                                    })))
+                                    })                                
                                 )                                
                             });
 
                             staging_mappings.push(quote! {{
                                 let buffer_slice = &buffer_slices.iter().find(|(i, _)| i == &#binding_index).unwrap().1;
                                 let data = buffer_slice.get_mapped_range();
-                                self.#field_name = bytemuck::cast_slice(&data).to_vec();                                
+                                self.#field_name = bytemuck::cast_slice(&data).to_vec();
+                                drop(data);
                             }});
                         }
                     }
@@ -323,39 +326,14 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
                         }
                     });
 
+                    // Add staging buffers for StorageTexture
                     if staging {
-
-                        staging_storage_impls.push(quote! {
-                            (
-                                #binding_index,
-                                {
-                                    let handle: Option<&bevy::asset::Handle<bevy::render::texture::Image>> = (&self.#field_name).into();
-                                    // let Some(image) = images.get(handle) else {                                    
-                                    //     panic!("failed to find image for staging");
-                                    // }
-                                    // let image = images.get(handle) {
-                                    //     return None;
-                                    // }
-
-                                    //dbg!(image.size);                                  
-
-                                    Some(bevy::render::render_resource::OwnedBindingResource::Buffer(render_device.create_buffer(&bevy::render::render_resource::BufferDescriptor {
-                                        label: None,
-                                        usage: bevy::render::render_resource::BufferUsages::COPY_DST
-                                        | bevy::render::render_resource::BufferUsages::MAP_READ,
-                                        size: 4, //image.size.width as u64 * image.size.height as u64 * 4,
-                                        mapped_at_creation: false,
-                                    })))
-                                }
-                            
-                            )                                
+                        staging_handles.push(quote! {
+                            {                                    
+                                let handle: Option<&bevy::asset::Handle<bevy::render::texture::Image>> = (&self.#field_name).into();
+                                handle.unwrap().clone()
+                            }
                         });
-
-                        // staging_mappings.push(quote! {{
-                        //     let buffer_slice = &buffer_slices.iter().find(|(i, _)| i == &#binding_index).unwrap().1;
-                        //     let data = buffer_slice.get_mapped_range();
-                        //     self.#field_name = bytemuck::cast_slice(&data).to_vec();                                
-                        // }});
                     }
                 }
                 BindingType::Texture => {
@@ -572,22 +550,24 @@ pub fn derive_as_bind_group_compute(ast: syn::DeriveInput) -> Result<TokenStream
 
             fn create_staging_buffers(
                 &self,                
-                render_device: &bevy::render::renderer::RenderDevice,
-                images: &bevy_sly_compute::ComputeAssets<bevy::render::texture::Image>,
-            ) -> Vec<(u32, Option<bevy::render::render_resource::OwnedBindingResource>)>
+                render_device: &bevy::render::renderer::RenderDevice,                
+            ) -> bevy_sly_compute::StageBindGroup
             {
-                use bevy::render::render_resource::AsBindGroupShaderType;
-
-                vec![#(#staging_storage_impls,)*]
-
+                use bevy::render::render_resource::AsBindGroupShaderType;                
+                                
+                bevy_sly_compute::StageBindGroup {
+                    storage: vec![#(#staging_storage_impls,)*],
+                    handles: vec![#(#staging_handles,)*]
+                }
             }
 
-            fn map_staging_mappings(
-                &mut self,               
+            fn map_storage_mappings(
+                &mut self,
                buffer_slices: &Vec<(u32, bevy::render::render_resource::BufferSlice<'_>)>,
            ) {
                 #(#staging_mappings)*
            }
+           
          }
      }))
 }

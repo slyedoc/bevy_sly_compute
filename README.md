@@ -6,22 +6,23 @@ Plugin aims to provide easy way access data created or modified on the GPU, back
 
 An ideal solution would most likely be a PR to bevy:
 
-  - No Compute World, stay in render world, worthless without long running compute tasks, and not possable in wgpu currently (find Issue for this) and no texture duplication issues.
-  - Extend AsBindGroup to create staging buffers (similar to this repo)
-  - In cleanup, map staging buffers back to render world resource, then send an event or just storing in a resource (resources are retained in render world)
-  - _ReverseExtract_ Phase or Events to move data back to app world.
-  
-### Issue
+- No Compute World, stay in render world, worthless without long running compute tasks, and not possable in wgpu currently (find Issue for this) and no texture duplication issues.
+- Extend AsBindGroup to create staging buffers (similar to this repo)
+- In cleanup, map staging buffers back to render world resource, then send an event or just storing in a resource (resources are retained in render world)
+- _ReverseExtract_ Phase or Events to move data back to app world.
 
-You can't get data out of render_app as far as I know, this bypasses that by using the app world by duplicating things. 
-  - ```PiplelineCache```
-  - ```RenderAssets<Image>```
+## Issue
+
+You can't get data out of render_app as far as I know, this bypasses that by using the app world by duplicating things.
+
+- ```PiplelineCache```
+- ```RenderAssets<Image>```
 
 See [PR #8440](https://github.com/bevyengine/bevy/issues/8440)
 
 ### TODO
 
-- [ ] 0.13
+- [ ] 0.13 - waiting on bevy-inspector-egui
 - [ ] Data:
   - [ ] Uniform
   - [x] Storage
@@ -161,6 +162,7 @@ fn log_change( simple: Res<Simple> ) {
 ## References
 
 - [bevy-app-compute](https://github.com/Kjolnyr/bevy_app_compute) - Closest thing to what I want, but no texture support, and magic strings.
-- [hello-compute](https://github.com/gfx-rs/wgpu-rs/blob/master/examples/hello-compute/main.rs) - Example of using compute shaders in wgpu.
+- [wgpu hello-compute](https://github.com/gfx-rs/wgpu-rs/blob/master/examples/hello-compute/main.rs) - Example of using compute shaders in wgpu.
+- [wgpu capture](https://github.com/gfx-rs/wgpu-rs/blob/master/examples/capture/main.rs)
 - [AsBindGroup docs](https://docs.rs/bevy/latest/bevy/render/render_resource/trait.AsBindGroup.html) - Documenation for AsBindGroup, which is duplicated here for now.
 - [PR #8440](https://github.com/bevyengine/bevy/issues/8440) - Issue for adding support for compute shaders in bevy.

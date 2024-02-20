@@ -9,9 +9,13 @@ keywords = ["bevy"]
 repository = "https://github.com/slyedoc/bevy_sly_compute"
 license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["egui"]
+egui = ["bevy-inspector-egui"]
 
 [dependencies]
 bevy_sly_compute_macros = { path = "./macros", version = "0.0.1" }
+bevy-inspector-egui = { version = "0.22", optional = true }
 
 bevy = "0.12"
 parking_lot = "0.12.1"
@@ -24,12 +28,15 @@ naga = { version = "0.13.0", features = ["wgsl-in"] }
 naga_oil = "0.10"
 flume = "0.11"
 
-[dev-dependencies]
+[dev-dependencies] 
 bevy-inspector-egui = "0.22"
-
+bevy_xpbd_3d = { version = "0.3", features = [ "debug-plugin"] }
+leafwing-input-manager = "0.11"
+bevy_panorbit_camera = "0.13"
 
 [patch.crates-io]
 bevy-inspector-egui = { git = "https://github.com/slyedoc/bevy-inspector-egui.git", branch = "image-format" }
+
 
 #This is a one line patch to make the DefaultImageSampler pub
 

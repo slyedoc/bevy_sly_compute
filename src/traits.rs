@@ -1,15 +1,16 @@
 use bevy::{
     prelude::*,
     render::{
-        render_resource::{
-            AsBindGroupError, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
-            BindGroupLayoutEntry, PreparedBindGroup, ShaderDefVal, ShaderRef, UnpreparedBindGroup,
+        render_resource::{            
+            AsBindGroupError, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, PreparedBindGroup, ShaderDefVal, ShaderRef, UnpreparedBindGroup
         },
         renderer::RenderDevice,
         texture::FallbackImage,
     },
 };
 use wgpu::PushConstantRange;
+
+use crate::StageBindGroup;
 
 use super::ComputeAssets;
 
@@ -93,14 +94,14 @@ pub trait AsBindGroupCompute {
     /// Creates cpu staging buffers, should be used to read back data from the gpu.
     fn create_staging_buffers(
         &self,
-        render_device: &RenderDevice,
-        images: &ComputeAssets<Image>,
-    ) -> Vec<(u32, Option<bevy::render::render_resource::OwnedBindingResource>)>
+        render_device: &RenderDevice,        
+    ) -> StageBindGroup
     where
         Self: Sized;
 
+
     /// Maps the staging buffer slices to Self
-    fn map_staging_mappings(
+    fn map_storage_mappings(
         &mut self,
         staging_buffers: &Vec<(u32, bevy::render::render_resource::BufferSlice<'_>)>,
     ) where

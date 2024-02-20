@@ -6,22 +6,20 @@ use bevy::{
     ecs::world::{FromWorld, World},
     prelude::*,
     render::{
-        render_resource::{
-            BindGroup, BindGroupLayout, Buffer, ComputePipeline, ComputePipelineDescriptor,
-            OwnedBindingResource, ShaderRef,
-        },
+        render_resource::*,
         renderer::{RenderDevice, RenderQueue},
-        texture::FallbackImage,
+        texture::{FallbackImage, TextureFormatPixelInfo},
+        view::screenshot::layout_data,
     },
+    ui::debug,
     utils::{HashMap, Uuid},
 };
+
 use bytemuck::{bytes_of, cast_slice, from_bytes, AnyBitPattern, NoUninit};
 use wgpu::{BindGroupEntry, CommandEncoder, CommandEncoderDescriptor, ComputePassDescriptor};
 
 use crate::{
-    error::{Error, Result},
-    pipeline_cache::{AppPipelineCache, CachedAppComputePipelineId},
-    ComputeAssets, ComputePlugin, ComputeShader, ComputeTrait,
+    error::{Error, Result}, events::*, pipeline_cache::{AppPipelineCache, CachedAppComputePipelineId}, ComputeAssets, ComputeEvent, ComputePlugin, ComputeShader, ComputeTrait, ComputeUpdateEgui, RequeueComputeEvent, StageBindGroup
 };
 
 use crate::AsBindGroupCompute;
@@ -45,92 +43,54 @@ impl<T: ComputeTrait> Plugin for ComputeWorkerPlugin<T> {
             app.add_plugins(ComputePlugin::default());
         }
 
-        app.add_event::<ComputeEvent<T>>()
+        app
+            .add_event::<ComputeEvent<T>>()
+            .add_event::<crate::events::ComputeComplete<T>>()
+            .add_event::<RequeueComputeEvent<T>>()
             .add_systems(Startup, setup::<T>)
-            .add_systems(
-                Update, run::<T>.run_if(on_event::<ComputeEvent<T>>()),
+            // all work is done here
+            .add_systems(Update, 
+                (   
+                    run::<T>,
+                    // hack to retry when pipeline is not ready
+                    requeue::<T>
+                ).chain()
+                .run_if(on_event::<ComputeEvent<T>>())
             );
     }
 }
 
-#[derive(Event)]
-pub struct ComputeEvent<T: ComputeTrait> {
-    pub passes: Vec<ComputePass>,
-    pub _marker: PhantomData<T>,
-}
-
-impl<T: ComputeTrait> Default for ComputeEvent<T> {
-    fn default() -> Self {
-        Self { 
-            passes: vec![ComputePass {
-                entry: T::entry_points().first().expect("no entry points"),
-                workgroups: vec![UVec3::new(1, 1, 1)],
-            }], 
-            _marker: Default::default()
-         }
-    }
-}
-
-impl<T: ComputeTrait> ComputeEvent<T> {
-    pub fn new(workgroups: UVec3) -> Self {        
-        ComputeEvent::<T> {
-            passes: vec![
-                ComputePass {
-                    entry: T::entry_points().first().expect("no entry points"),
-                    workgroups: vec![workgroups],
-                }
-            ],
-            _marker: Default::default(),
-        }
-    }
-
-    pub fn new_xyz( x: u32, y: u32, z: u32) -> Self {        
-        ComputeEvent::<T> {
-            passes: vec![
-                ComputePass {
-                    entry: T::entry_points().first().expect("no entry points"),
-                    workgroups: vec![UVec3::new(x, y, z)],
-                }
-            ],
-            _marker: Default::default(),
-        }
-    }
-
-    pub fn add_pass(&mut self, entry: &'static str, workgroup: UVec3) -> &mut Self {
-        self.passes.push(ComputePass::new(entry, workgroup));
-        self
-    }
-
-}
 
 fn setup<T: ComputeTrait>(mut commands: Commands) {
     // delay the creation till pipeline cache exists
     commands.init_resource::<ComputeWorker<T>>();
 }
 
-// 
+// NOTE:  All gpu work is done here, this could be split into multiple systems,
+//  but since I am learning this its been much easyer to keep it all in one place to reason on
 fn run<T: ComputeTrait>(
     mut events: EventReader<ComputeEvent<T>>,
-    worker: Res<ComputeWorker<T>>, 
+    mut requeue_events: EventWriter<RequeueComputeEvent<T>>,
+    mut complete_events: EventWriter<ComputeComplete<T>>,
+    #[cfg(feature = "egui")]
+    mut egui_events: EventWriter<ComputeUpdateEgui>,
+    worker: Res<ComputeWorker<T>>,
     mut data: ResMut<T>,
     pipeline_cache: Res<AppPipelineCache>,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
+    mut images: ResMut<Assets<Image>>,
     gpu_images: Res<ComputeAssets<Image>>,
     fallback_image: Res<FallbackImage>,
 ) {
     // TODO: test multiple events
     events.read().for_each(|event| {
-
         // check passes for early out
         event.passes.iter().for_each(|pass| {
-            // check entry points
             if !T::entry_points().contains(&pass.entry) {
                 warn!("invalid entry point for compute event {:?}, skipping", pass);
                 return;
             }
-
-            // check workgroup sizes            
             pass.workgroups.iter().for_each(|workgroup| {
                 if workgroup.x == 0 || workgroup.y == 0 || workgroup.z == 0 {
                     warn!("invalid workgroups for compute event {:?}, skipping", pass);
@@ -138,79 +98,133 @@ fn run<T: ComputeTrait>(
                 }
             });
         });
-        
+
         // Generate bind group
-        // Ordering seems off here, are gpu images ready?
         let Ok(prepared) = data.as_bind_group(
             &worker.bind_group_layout,
             &render_device,
             &gpu_images,
             &fallback_image,
         ) else {
+            requeue_events.send(RequeueComputeEvent {
+                passes: event.passes.clone(),
+                _marker: Default::default(),
+            });
             error!("failed to prepare compute worker bind group");
             return;
         };
 
-        // create command encoder for our compute passes
-        let mut encoder = render_device.create_command_encoder(&CommandEncoderDescriptor { label: T::label() });
-        
-        // create staging buffers, we filter out None, these coudlnt find the image to get the size
-        let staging = data.create_staging_buffers(&render_device, &gpu_images)
-            .into_iter()
-            .filter(| (_, resource) | resource.is_some() )
-            .map(|(index,  resource)| (index, resource.unwrap()))
-            .collect::<Vec<_>>();
-        
+        // create staging buffers
+        let StageBindGroup {
+            storage: storage_buffers,
+            handles: stage_image,
+        } = data.create_staging_buffers(&render_device);
 
-        // run passes
+        // create staging buffers for images
+        // NOTE: It is a WebGPU requirement that ImageCopyBuffer.layout.bytes_per_row % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT == 0
+        // So we calculate padded_bytes_per_row by rounding unpadded_bytes_per_row
+        // up to the next multiple of wgpu::COPY_BYTES_PER_ROW_ALIGNMENT.
+        // https://en.wikipedia.org/wiki/Data_structure_alignment#Computing_padding
+        let stage_image = stage_image
+            .into_iter()
+            .map(|handle| {
+                let image = images.get(&handle).unwrap();
+                //let _gpu_image = gpu_images.get(handle).unwrap();
+                let width = image.width() as usize;
+                let height = image.height() as usize;
+                let pixel_size = image.texture_descriptor.format.pixel_size();
+                let buffer_dimensions = BufferDimensions::new(width, height, pixel_size as usize);
+                (
+                    handle,
+                    render_device.create_buffer(&bevy::render::render_resource::BufferDescriptor {
+                        label: None,
+                        usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                        size: (buffer_dimensions.padded_bytes_per_row * buffer_dimensions.height)
+                            as u64,
+                        mapped_at_creation: false,
+                    }),
+                    buffer_dimensions,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        // create command encoder for our compute passes
+        let mut encoder =
+            render_device.create_command_encoder(&CommandEncoderDescriptor { label: T::label() });
+
+        // run multiple passes and dispatch workgroups
+        // seemed like a simple solution, and appears to work
         for pass in event.passes.iter() {
-            
-            // get pipeline depending on entry point, need index
+            // get pipeline depending on entry point, need its index
             let Some(index) = T::entry_points().iter().position(|&x| x == pass.entry) else {
-                error!("failed to find entry point {} for compute event", pass.entry);
+                error!(
+                    "failed to find entry point {} for compute event",
+                    pass.entry
+                );
                 return;
-            };    
-            
-            let Some(pipeline) = pipeline_cache.get_compute_pipeline(worker.pipelines[index]) else {
+            };
+
+            let Some(pipeline) = pipeline_cache.get_compute_pipeline(worker.pipelines[index])
+            else {
                 error!("failed to find pipeline for compute event");
                 return;
             };
-        
-            let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor { label: None });
+
+            let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some(pass.entry),
+            });
             cpass.set_pipeline(pipeline);
             cpass.set_bind_group(0, &prepared.bind_group, &[]);
             for workgroup in pass.workgroups.iter() {
                 cpass.dispatch_workgroups(workgroup.x, workgroup.y, workgroup.z);
-            }                        
+            }
         }
 
-        // copy buffer to staging
-        for (index, owned_staging_buffer) in staging.iter() {
-            let (_, buffer) = prepared.bindings.iter().find(|(i, _)| i == index).unwrap();
-            let OwnedBindingResource::Buffer(buffer) = buffer else {
-                error!("failed to find buffer for staging");
+        // copy resource from gpu to buffer on cpu
+        for (index, staging_buff) in storage_buffers.iter() {
+            // find resource on gpu
+            let Some((_, OwnedBindingResource::Buffer(gpu_buffer))) =
+                prepared.bindings.iter().find(|(i, _)| i == index)
+            else {
+                error!("failed to find binding resource for staging");
                 return;
             };
 
-            let staging_buffer = match owned_staging_buffer {
-                OwnedBindingResource::Buffer(b) => b,
-                _ => unreachable!(),                
-            };
-            encoder.copy_buffer_to_buffer(&buffer, 0, &staging_buffer, 0, buffer.size());
+            encoder.copy_buffer_to_buffer(&gpu_buffer, 0, &staging_buff, 0, gpu_buffer.size());
         }
 
-        // submit
+        // copy images from gpu to buffer on cpu
+        stage_image
+            .iter()
+            .for_each(|(handle, buffer, dim)| {
+                let gpu_image = gpu_images.get(handle).unwrap();
+                encoder.copy_texture_to_buffer(
+                    gpu_image.texture.as_image_copy(),
+                    ImageCopyBuffer {
+                        buffer: &buffer,
+                        layout: ImageDataLayout {
+                            bytes_per_row: Some(dim.padded_bytes_per_row as u32),
+                            rows_per_image: None,
+                            ..Default::default()
+                        },
+                    },
+                    Extent3d {
+                        width: dim.width as u32,
+                        height: dim.height as u32,
+                        depth_or_array_layers: 1,
+                    },
+                );
+            });
+
+        // submit, this will wait for everything to finish,
+        // TODO: we have no idea what render app is doing
         render_queue.submit(Some(encoder.finish()));
 
-        // create buffer slices of staging buffers
-        let buffer_slices = staging
+        // Note that we're not calling `.await` here will call render_device.wgpu_device().poll belo
+        let storage_buffer_slices = storage_buffers
             .iter()
-            .map(|(index, owned_staging_buffer)| {
-                let staging_buffer = match owned_staging_buffer {
-                    OwnedBindingResource::Buffer(b) => b,
-                    _ => unreachable!(),                
-                };
-                let buffer_slice = staging_buffer.slice(..);
+            .map(|(index, buffer)| {
+                let buffer_slice = buffer.slice(..);
                 buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
                     let err = result.err();
                     if err.is_some() {
@@ -222,51 +236,87 @@ fn run<T: ComputeTrait>(
             })
             .collect::<Vec<_>>();
 
+        let image_buffer_slices = stage_image.iter()            
+            .map(|(_handle, buffer, _dim)| {
+                let buffer_slice = buffer.slice(..);
+                buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+                    let err = result.err();
+                    if err.is_some() {
+                        let some_err = err.unwrap();
+                        panic!("{}", some_err.to_string());
+                    }
+                });
+                buffer_slice
+            })
+            .collect::<Vec<_>>();
+
+        // await here?
+
         // wait for gpu to finish
         render_device.wgpu_device().poll(wgpu::MaintainBase::Wait);
-        
+
         // Write the data from buffer slices back to T
         // Will trigger change detection
-        data.map_staging_mappings(&buffer_slices);
+        data.bypass_change_detection()
+            .map_storage_mappings(&storage_buffer_slices);
 
-        // doing this here because it was in hello compute, need to double check this
-        drop(buffer_slices);
-        staging.iter().for_each(|(_, staging_buffer)| {
-            match staging_buffer {
-                OwnedBindingResource::Buffer(b) => b.unmap(),
-                _ => unreachable!(),                
-            };
+        for (index, (handle, _buffer, dim)) in stage_image.iter().enumerate() {
+            let image = images.get_mut(handle).unwrap();
+            let pixel_size = image.texture_descriptor.format.pixel_size() as usize; // Assuming you have this
+
+            let padded_data = &image_buffer_slices[index].get_mapped_range();
+
+            // I need to convert the padded buffer to unpadded buffer
+            let mut unpadded_data = Vec::with_capacity(dim.width * dim.height * pixel_size);
+            for row in 0..dim.height {
+                let start = row * dim.padded_bytes_per_row;
+                let end = start + dim.unpadded_bytes_per_row;
+                unpadded_data.extend_from_slice(&padded_data[start..end]);
+            }
+
+            // this doesnt work
+            image.data = unpadded_data;
+
+            #[cfg(feature = "egui")]
+            // egui doesnt watch for changes to asset image
+            // so we need to remove it, and it will be add back
+            // with new data
+            egui_events.send(ComputeUpdateEgui {
+                handle: handle.clone_weak(),
+            });
+
+            //buffer.unmap();
+        }
+
+        drop(storage_buffer_slices);
+        storage_buffers.iter().for_each(|(_, buffer)| {
+            buffer.unmap();
+        });
+
+        complete_events.send(ComputeComplete::<T>::default());
+    });
+}
+
+fn requeue<T: ComputeTrait>(
+    mut events: EventReader<RequeueComputeEvent<T>>,
+    mut compute: EventWriter<ComputeEvent<T>>,
+) {
+    
+    events.read().for_each(|event| {
+        compute.send(ComputeEvent::<T> {
+            passes: event.passes.clone(),
+            ..default()
         });
     });
 }
-    
-#[derive(Clone, Debug)]
-pub struct ComputePass {
-    /// entry point for pipeline, need pipeline per entry point
-    pub entry: &'static str,
-
-    /// workgroup sizes to run for entry point
-    pub workgroups: Vec<UVec3>,
-}
-
-impl ComputePass {
-    pub fn new(entry: &'static str, workgroups: UVec3) -> Self {
-        ComputePass {
-            entry,
-            workgroups: vec![workgroups],
-        }
-    }
-}
 
 /// Struct to manage data transfers from/to the GPU
-/// it also handles the logic of your compute work.
 #[derive(Resource)]
 pub struct ComputeWorker<T: ComputeTrait> {
-    
     // pipelines ordered by entry point
     pub pipelines: Vec<CachedAppComputePipelineId>,
 
-    // bind group 
+    // bind group
     pub bind_group: Option<BindGroup>,
     pub bind_group_layout: BindGroupLayout,
 
@@ -299,12 +349,34 @@ impl<T: ComputeTrait> FromWorld for ComputeWorker<T> {
             });
             pipelines.push(pipeline);
         }
-        
+
         Self {
             bind_group: None,
             bind_group_layout: bind_group_layout,
             pipelines,
             _marker: Default::default(),
+        }
+    }
+}
+
+struct BufferDimensions {
+    width: usize,
+    height: usize,
+    unpadded_bytes_per_row: usize,
+    padded_bytes_per_row: usize,
+}
+
+impl BufferDimensions {
+    fn new(width: usize, height: usize, bytes_per_pixel: usize) -> Self {
+        let unpadded_bytes_per_row = width * bytes_per_pixel;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize;
+        let padded_bytes_per_row_padding = (align - unpadded_bytes_per_row % align) % align;
+        let padded_bytes_per_row = unpadded_bytes_per_row + padded_bytes_per_row_padding;
+        Self {
+            width,
+            height,
+            unpadded_bytes_per_row,
+            padded_bytes_per_row,
         }
     }
 }

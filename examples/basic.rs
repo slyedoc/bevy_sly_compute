@@ -1,7 +1,7 @@
 // Most basic use case
 use bevy::{prelude::*, window::close_on_esc};
 use bevy_sly_compute::prelude::*;
-
+ 
 // Just like AsBindGroup
 #[derive(AsBindGroupCompute, Resource, Clone, Debug)]
 pub struct Simple {
@@ -29,7 +29,8 @@ fn main() {
             vec: vec![1.0, 2.0, 3.0, 4.0],
         })
         .add_systems(Startup, setup)
-        .add_systems(Update, (run_compute, log_change, close_on_esc))
+        .add_systems(Update, (run_compute, close_on_esc))
+        .add_systems(Last, log_change.run_if(on_event::<ComputeComplete<Simple>>()))        
         .run();
 }
 
@@ -44,10 +45,10 @@ fn run_compute(
 }
 
 fn log_change( simple: Res<Simple> ) {
-    if simple.is_changed() {        
-        dbg!(&simple);
-    }    
+    dbg!(&simple);
 }
+
+
 
 // Setup a simple 2D camera and text
 fn setup(mut commands: Commands) {

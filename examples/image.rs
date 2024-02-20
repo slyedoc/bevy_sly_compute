@@ -1,37 +1,32 @@
 use std::vec;
 
 use bevy::{
-    prelude::*,
-    window::{close_on_esc, PrimaryWindow},
-    render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
+    core_pipeline::tonemapping::Tonemapping, prelude::*, render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages}, window::close_on_esc
 };
+use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use bevy_sly_compute::prelude::*;
 use bevy_inspector_egui::{
-    bevy_egui::{EguiContext, EguiPlugin},
-    bevy_inspector, egui,
-    inspector_options::std_options::NumberDisplay,
-    prelude::*,    
-    DefaultInspectorConfigPlugin,
+    inspector_options::std_options::NumberDisplay, prelude::*, quick::ResourceInspectorPlugin
 };
 
+const TEXTURE_SIZE: u32 = 512;
 const WORKGROUP_SIZE: u32 = 8;
-const TEXTURE_SIZE: u32 = 256;
-const WORKGROUP: UVec3 = UVec3 {
-    x: TEXTURE_SIZE / WORKGROUP_SIZE,
-    y: TEXTURE_SIZE / WORKGROUP_SIZE,
-    z: 1,
-};
 
 fn main() {
     App::new()
     .add_plugins((
         DefaultPlugins,
-        ComputeWorkerPlugin::<Simple>::default(),        
-        SimpleInspectorPlugin,
+        PanOrbitCameraPlugin, // Camera control      
+        ComputeWorkerPlugin::<Simple>::default(),                 
+        ResourceInspectorPlugin::<Simple>::default(),
     ))
     //.add_plugins()
     .init_resource::<Simple>()
     .register_type::<Simple>()
+    
+    .add_systems(Startup, setup)
+    .add_systems(Update, trigger_computue.run_if(resource_changed::<Simple>()) )
+    .add_systems(Last, process_terrain.run_if(on_event::<ComputeComplete<Simple>>()))
     .add_systems(Update, close_on_esc)
     .run();
 }
@@ -45,11 +40,14 @@ pub struct Simple {
     #[uniform(0)]
     fill: f32,
     
-    #[uniform(1)]
-    color: Color,
+    // TODO: min max not working
+    #[uniform(1, min = 0.0, max = 1.0, display = NumberDisplay::Slider)] 
+    offset_x: f32,
 
+    #[uniform(2, min = 0.0, max = 1.0, display = NumberDisplay::Slider)]
+    offset_y: f32,
 
-    #[storage_texture(2, image_format = Rgba8Unorm, access = ReadWrite)]
+    #[storage_texture(3, image_format = Rgba8Unorm, access = ReadWrite, staging)]
     pub image: Handle<Image>,    
 }
 
@@ -65,8 +63,7 @@ impl FromWorld for Simple {
                 depth_or_array_layers: 1,
             },
             TextureDimension::D2,
-            // setting to red
-            &[255, 0, 0, 255],
+            &[255, 0, 0, 255],  // setting to red
             TextureFormat::Rgba8Unorm,
         );
         image.texture_descriptor.usage = TextureUsages::COPY_SRC            
@@ -76,7 +73,8 @@ impl FromWorld for Simple {
 
         Self {
             fill: 0.5,
-            color: Color::RED,
+            offset_x: -0.5,
+            offset_y: -0.5,
             image: image_handle,
         }
     }
@@ -92,60 +90,89 @@ impl ComputeShader for Simple {
     }
 }
 
-fn run_compute(
-    keys: Res<Input<KeyCode>>,    
-    mut compute_events: EventWriter<ComputeEvent<Simple>>,  
+
+// helper to trigger compute passes of the correct size
+fn trigger_computue(    
+    mut compute: EventWriter<ComputeEvent<Simple>>,
 ) {
-    if keys.just_pressed(KeyCode::Space) {
-        compute_events.send(ComputeEvent::<Simple>::new(WORKGROUP));
-    }
+    
+    compute.send(ComputeEvent::<Simple> {
+        passes: vec![
+            ComputePass {
+                entry: "main",
+                workgroups: vec![UVec3 {
+                    // dispatch size
+                    x: TEXTURE_SIZE / WORKGROUP_SIZE,
+                    y: TEXTURE_SIZE / WORKGROUP_SIZE,
+                    z: 1,
+                }],
+            },
+        ],
+        ..default()
+    });
 }
 
-// This is not ideal in a example, but small window size was driving me nuts
-// Basiclly a copy of ResourceInspectorPlugin::<Simple>::default() with a different window size
-struct SimpleInspectorPlugin;
+#[derive(Component)]
+pub struct Target;
 
-impl Plugin for SimpleInspectorPlugin {
-    fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<DefaultInspectorConfigPlugin>() {
-            app.add_plugins(DefaultInspectorConfigPlugin);
-        }
-        if !app.is_plugin_added::<EguiPlugin>() {
-            app.add_plugins(EguiPlugin);
-        }
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    simple: Res<Simple>,
+    mut ambient_light: ResMut<AmbientLight>,
+) {
 
-        app.add_systems(Update, (run_compute, close_on_esc, simple_inspector_ui));
-    }
+    ambient_light.brightness = 0.0;
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_translation(Vec3::new(0.0, 10.0, 10.0))
+                .looking_at(Vec3::ZERO, Vec3::Y),
+            tonemapping: Tonemapping::None,
+            ..Default::default()
+        },
+        
+        PanOrbitCamera::default(),
+    ));
+
+    // commands.spawn(DirectionalLightBundle {
+    //     transform: Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_4)),
+    //     ..Default::default()
+    // });
+
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Plane {
+                size: 20.0,
+                subdivisions: 10,
+            })),
+            material: materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(simple.image.clone()),
+                unlit: true,
+                ..Default::default()
+            }),
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+            ..Default::default()
+        },
+        Target,
+    )); 
 }
 
-fn simple_inspector_ui(world: &mut World) {
-    let Ok(egui_context) = world
-        .query_filtered::<&mut EguiContext, With<PrimaryWindow>>()
-        .get_single(world) else {
+fn process_terrain(
+    terrain: Res<Simple>,
+    // mut meshes: ResMut<Assets<Mesh>>,
+    // mut images: ResMut<Assets<Image>>,
+    mut standard_materials: ResMut<Assets<StandardMaterial>>,
+    mut query: Query<&Handle<StandardMaterial>, With<Target>>,
+) {
+    info!("compute complete");
+    let material_handle = query.single_mut();
+    let Some(mat) = standard_materials.get_mut(material_handle) else {
+        warn!("update terrain failed, no material found");
         return;
     };
 
-    let mut egui_context = egui_context.clone();
-
-    egui::Window::new("Simple")
-        .default_size((200., 500.))
-        .show(egui_context.get_mut(), |ui| {
-            egui::ScrollArea::both().show(ui, |ui| {
-                bevy_inspector::ui_for_resource::<Simple>(world, ui);
-
-                // button to trigger compute
-                ui.separator();
-
-                // Button that span the window
-                if ui
-                    .add_sized(egui::vec2(ui.available_width(), 30.0), egui::Button::new("Run Compute"))
-                    .clicked()
-                {
-                    let mut worker = world.resource_mut::<ComputeWorker<Simple>>();
-                    todo!();
-                }
-
-                ui.allocate_space(ui.available_size());
-            });
-        });
+    // TODO: Shouldn't need to do this, need to some how flag Image as changed
+    mat.base_color_texture = Some(terrain.image.clone());
 }
