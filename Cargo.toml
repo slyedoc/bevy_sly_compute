@@ -31,11 +31,11 @@ flume = "0.11"
 bevy-inspector-egui = "0.22"
 bevy_xpbd_3d = { version = "0.3", features = [ "debug-plugin"] }
 leafwing-input-manager = "0.11"
-bevy_panorbit_camera = "0.13"
+bevy_panorbit_camera = { version = "0.13", features = ["bevy_egui"] }
 
 [patch.crates-io]
-bevy-inspector-egui = { git = "https://github.com/slyedoc/bevy-inspector-egui.git", branch = "image-format" }
-
+#bevy-inspector-egui = { git = "https://github.com/slyedoc/bevy-inspector-egui.git", branch = "image-format" }
+bevy-inspector-egui = { path = "../../f/bevy-inspector-egui/crates/bevy-inspector-egui" }
 
 # And due to workspace patching, I need to patch all the bevy crates, might have missed one
 bevy = { git = "https://github.com/slyedoc/bevy.git", branch = "texture" }

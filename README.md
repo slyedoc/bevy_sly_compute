@@ -23,7 +23,9 @@ See [PR #8440](https://github.com/bevyengine/bevy/issues/8440)
 - [ ] Data:
   - [ ] Uniform
   - [x] Storage
-  - [x] Storage Texture - handles padded buffer due to 
+  - [x] StorageTexture
+    - [ ] Tested with R32Float, Rgba8Unorm
+    - [ ] add error to macro when and check for readwrite support depending on format [notes](https://webgpufundamentals.org/webgpu/lessons/webgpu-storage-textures.html)
   - [ ] Buffer  
 - Examples:
   - [x] Basic
@@ -160,6 +162,7 @@ fn compute_complete( simple: Res<Simple> ) {
 
 ## References
 
+- [WebGPU Storage Textures](https://webgpufundamentals.org/webgpu/lessons/webgpu-storage-textures.html)
 - [bevy-app-compute](https://github.com/Kjolnyr/bevy_app_compute) - Closest thing to what I want, but no texture support, and magic strings.
 - [wgpu hello-compute](https://github.com/gfx-rs/wgpu-rs/blob/master/examples/hello-compute/main.rs) - Example of using compute shaders in wgpu.
 - [wgpu capture](https://github.com/gfx-rs/wgpu-rs/blob/master/examples/capture/main.rs)

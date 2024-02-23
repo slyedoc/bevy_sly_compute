@@ -17,9 +17,6 @@ fn main(
     let uv = vec2<f32>(f32(invocation_id.x) / uv_scale.x, 1.0 - f32(invocation_id.y) / uv_scale.y);
     var pi = 3.141592653589793;   
 
-    //let c = vec4<f32>(sin(uv.x), 0.0, 0.0, 1.0);
-    //let c = vec4<f32>(uv.x, uv.y, 0.0, 1.0);    
-
     // sin waves
     let wave = sin(uv.x * pi * scale) * 0.5 + 0.5;
     let c = vec4<f32>(wave, 0.0, 0.0, 1.0);

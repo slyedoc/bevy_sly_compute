@@ -61,6 +61,20 @@ impl<T: ComputeTrait> ComputeEvent<T> {
         }
     }
 
+    pub fn new_named(name: &'static str, workgroups: UVec3) -> Self {        
+        ComputeEvent::<T> {
+            passes: vec![
+                ComputePass {
+                    entry: name,
+                    workgroups: vec![workgroups],
+                }
+            ],
+            retry: 0,
+            _marker: Default::default(),
+        }
+    }
+
+
     pub fn new_xyz( x: u32, y: u32, z: u32) -> Self {        
         ComputeEvent::<T> {
             passes: vec![

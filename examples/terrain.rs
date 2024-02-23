@@ -4,7 +4,7 @@ use bevy::{
     asset::load_internal_asset, pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{mesh::Indices, render_resource::*, texture::TextureFormatPixelInfo}, window::{close_on_esc, PrimaryWindow}
 };
 use bevy_inspector_egui::{
-    bevy_egui::{self, EguiContext, EguiContexts, EguiPlugin},
+    bevy_egui::{EguiContext, EguiPlugin},
     bevy_inspector, egui,
     inspector_options::std_options::NumberDisplay,
     prelude::*,
@@ -23,6 +23,67 @@ const WORKGROUP_SIZE: u32 = 8; // size of workgroup, shader should match
 pub enum AppAction {
     ToggleWireframe,
 }
+
+
+#[derive(Reflect, AsBindGroupCompute, Resource, Clone, InspectorOptions)]
+#[reflect(Resource, InspectorOptions)]
+pub struct Terrain {
+    #[uniform(0)]
+    #[inspector(min = 0.0, max = 10.0, display = NumberDisplay::Slider)]
+    scale: f32,
+    
+    // staging
+    #[storage_texture(1, image_format = Rgba8Unorm, access = ReadWrite, staging)]
+    image: Handle<Image>,
+
+    // how big the chunk in world units
+    #[uniform(2)]
+    #[inspector(min = 1, max = 50, display = NumberDisplay::Slider)]
+    world_size: u32,
+}
+
+impl ComputeShader for Terrain {
+    fn shader() -> ShaderRef {
+        ShaderRef::Handle(SHADER_HANDLE)
+    }
+
+    fn entry_points<'a>() -> Vec<&'a str> {
+        vec!["main"]
+    }
+}
+
+impl FromWorld for Terrain {
+    fn from_world(world: &mut World) -> Self {
+        // Create a new red image
+        let mut image = Image::new_fill(
+            Extent3d {
+                width: TEXTURE_SIZE,
+                height: TEXTURE_SIZE,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            // setting to red
+            &[255, 0, 0, 255],
+            TextureFormat::Rgba8Unorm,
+        );
+        // set the usage
+        image.texture_descriptor.usage = TextureUsages::COPY_SRC
+            | TextureUsages::COPY_DST
+            | TextureUsages::STORAGE_BINDING
+            | TextureUsages::TEXTURE_BINDING;
+
+        // add the image to the world
+        let mut images = world.resource_mut::<Assets<Image>>();
+        let image_handle = images.add(image);
+
+        Self {
+            scale: 1.0,
+            image: image_handle,
+            world_size: 10,
+        }
+    }
+}
+
 
 fn main() {
     let mut app = App::new();
@@ -58,14 +119,7 @@ fn main() {
         Update,
         toggle_wireframe.run_if(action_just_pressed(AppAction::ToggleWireframe)),
     )
-    .add_systems(Last, process_terrain.run_if(on_event::<ComputeComplete<Terrain>>()))
-    // helper to not move the mouse when over egui window
-    .add_systems(
-        PreUpdate,
-        (absorb_egui_inputs)
-                .after(bevy_egui::systems::process_input_system)
-                .before(bevy_egui::EguiSet::BeginFrame),
-    );
+    .add_systems(Last, process_terrain.run_if(on_event::<ComputeComplete<Terrain>>()));
 
     // loading internal asset, like editing files side by side
     load_internal_asset!(app, SHADER_HANDLE, "terrain.wgsl", Shader::from_wgsl);
@@ -161,54 +215,8 @@ fn toggle_wireframe(mut wireframe_config: ResMut<WireframeConfig>) {
     wireframe_config.global = !wireframe_config.global;
 }
 
-#[derive(Reflect, AsBindGroupCompute, Resource, Clone, InspectorOptions)]
-#[reflect(Resource, InspectorOptions)]
-pub struct Terrain {
-    #[uniform(0)]
-    #[inspector(min = 0.0, max = 10.0, display = NumberDisplay::Slider)]
-    scale: f32,
-    
-    // staging
-    #[storage_texture(1, image_format = Rgba8Unorm, access = ReadWrite, staging)]
-    image: Handle<Image>,
 
-    // how big the chunk in world units
-    #[uniform(2)]
-    #[inspector(min = 1, max = 50, display = NumberDisplay::Slider)]
-    world_size: u32,
-}
 
-impl FromWorld for Terrain {
-    fn from_world(world: &mut World) -> Self {
-        // Create a new red image
-        let mut image = Image::new_fill(
-            Extent3d {
-                width: TEXTURE_SIZE,
-                height: TEXTURE_SIZE,
-                depth_or_array_layers: 1,
-            },
-            TextureDimension::D2,
-            // setting to red
-            &[255, 0, 0, 255],
-            TextureFormat::Rgba8Unorm,
-        );
-        // set the usage
-        image.texture_descriptor.usage = TextureUsages::COPY_SRC
-            | TextureUsages::COPY_DST
-            | TextureUsages::STORAGE_BINDING
-            | TextureUsages::TEXTURE_BINDING;
-
-        // add the image to the world
-        let mut images = world.resource_mut::<Assets<Image>>();
-        let image_handle = images.add(image);
-
-        Self {
-            scale: 1.0,
-            image: image_handle,
-            world_size: 10,
-        }
-    }
-}
 
 impl Terrain {
     fn generate_mesh(&self, images: &Assets<Image>) -> Mesh {
@@ -324,18 +332,6 @@ impl Terrain {
         Collider::heightfield(heights, scale)
     }
 }
-
-impl ComputeShader for Terrain {
-    fn shader() -> ShaderRef {
-        ShaderRef::Handle(SHADER_HANDLE)
-    }
-
-    fn entry_points<'a>() -> Vec<&'a str> {
-        vec!["main"]
-    }
-}
-
-
 // This is not ideal in a example
 // but small window size from ResourceInspectorPlugin was driving me nuts
 // also added button to trigger compute
@@ -372,12 +368,4 @@ fn terrain_inspector_ui(world: &mut World) {
                 ui.allocate_space(ui.available_size());
             });
         });
-}
-
-
-// helper fuction to not move the mouse when over egui window
-fn absorb_egui_inputs(mut mouse: ResMut<Input<MouseButton>>, mut contexts: EguiContexts) {
-    if contexts.ctx_mut().is_pointer_over_area() {
-        mouse.reset_all();
-    }
 }

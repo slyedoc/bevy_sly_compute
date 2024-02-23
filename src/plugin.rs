@@ -36,6 +36,16 @@ pub struct ComputeRetryLimit<T: ComputeTrait> {
     _marker: PhantomData<T>,
 }
 
+impl<T: ComputeTrait> ComputeRetryLimit<T> {
+    pub fn new(count: u32) -> Self {
+        Self {
+            count,
+            _marker: Default::default(),
+        }
+    }
+
+}
+
 impl<T: ComputeTrait> Default for ComputeRetryLimit<T> {
     fn default() -> Self {
         Self {
@@ -107,7 +117,6 @@ fn run<T: ComputeTrait>(
     fallback_image: Res<FallbackImage>,
     retry_limit: Res<ComputeRetryLimit<T>>,
 ) {
-    // TODO: test multiple events
     events.read().for_each(|event| {
         // check passes for early out
         event.passes.iter().for_each(|pass| {
@@ -131,8 +140,11 @@ fn run<T: ComputeTrait>(
             &fallback_image,
         ) else {
             if event.retry > retry_limit.count {
-                error!("failed to prepare compute worker bind group, retry limit reached");
+                error!("failed to prepare compute worker bind group, retry limit reached: {}",
+                event.retry);
             } else {
+                // TODO: we have no idea what render app is doing,
+                // so we requeue, find better solution
                 requeue_events.send(RequeueComputeEvent {
                     passes: event.passes.clone(),
                     retry: event.retry + 1,

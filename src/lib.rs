@@ -36,6 +36,8 @@ pub mod prelude {
         pipeline_cache::{AppPipelineCache, CachedAppComputePipelineId},
         plugin::*,
         traits::*,
+        mark_shader_modified,
+        ComputeSystems,
         ComputeAssets, ComputePlugin,
     };
     pub use bevy_sly_compute_macros::AsBindGroupCompute;
@@ -77,7 +79,7 @@ impl ComputePlugin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[derive(SystemSet)]
-enum ComputeSystems {
+pub enum ComputeSystems {
     Prepare,
     Main,
     Cleanup
