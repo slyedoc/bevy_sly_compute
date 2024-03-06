@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 use channel::{create_compute_channels, ComputeMessage, ComputeReceiver, ComputeSender};
 pub use traits::*;
 
-mod plugin;
-pub use plugin::*;
+mod node;
+pub use node::*;
 
 mod resources;
 pub use resources::*;
@@ -22,7 +22,7 @@ pub mod prelude {
     pub use crate::{
         ComputePlugin,
         events::{Pass, *},
-        plugin::*,
+        node::*,
         traits::*,
         mark_shader_modified,
         MainComputePlugin,
@@ -53,7 +53,6 @@ impl Plugin for MainComputePlugin {
     }
 }
 
-
 pub struct ComputePlugin<T: ComputeTrait> {
     _marker: PhantomData<T>,
 }
@@ -78,7 +77,7 @@ impl<T: ComputeTrait> Plugin for ComputePlugin<T> {
         app.insert_resource(receiver)            
             .add_event::<ComputeEvent<T>>()
             .add_event::<ComputeComplete<T>>()
-            .add_systems(Last, listen_receiver::<T>);
+            .add_systems(Last, listen_receiver::<T>.run_if(resource_exists::<T>));
 
         let render_app = app.sub_app_mut(RenderApp);
 

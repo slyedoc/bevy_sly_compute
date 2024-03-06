@@ -1,4 +1,4 @@
-use std::{borrow::Cow, marker::PhantomData};
+use std::marker::PhantomData;
 
 use bevy::{
     prelude::*,
@@ -6,11 +6,10 @@ use bevy::{
         render_asset::RenderAssets,
         render_graph::{self, RenderLabel},
         render_resource::{
-            BindGroup, BindGroupLayout, CachedComputePipelineId, CachedPipelineState,
+             CachedPipelineState,
             ComputePassDescriptor, Extent3d, ImageCopyBuffer, ImageDataLayout,
-            OwnedBindingResource, PipelineCache, ShaderRef,
-        },
-        renderer::{RenderContext, RenderDevice},
+            OwnedBindingResource, PipelineCache,
+        }, renderer::RenderContext,
     },
 };
 
