@@ -3,7 +3,7 @@ use std::vec;
 // R32Float
 
 use bevy::{
-    core_pipeline::tonemapping::Tonemapping, prelude::*, render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages}, window::close_on_esc
+    core_pipeline::tonemapping::Tonemapping, prelude::*, render::{extract_resource::ExtractResource, render_asset::RenderAssetUsages, render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat, TextureUsages}}, window::close_on_esc
 };
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use bevy_sly_compute::prelude::*;
@@ -19,13 +19,13 @@ fn main() {
     .add_plugins((
         DefaultPlugins,
         PanOrbitCameraPlugin, // Camera control      
-        ComputeWorkerPlugin::<Simple>::default(), // our compute plugin                
+        ComputePlugin::<Simple>::default(), // our compute plugin                
         ResourceInspectorPlugin::<Simple>::default(), // inspector for Simple
     ))
     .init_resource::<Simple>()
     .register_type::<Simple>()
     .add_systems(Startup, setup)
-    .add_systems(Update, trigger_computue.run_if(resource_changed::<Simple>()) ) // run compute when resource changes
+    .add_systems(Update, trigger_computue.run_if(resource_changed::<Simple>) ) // run compute when resource changes
     .add_systems(Last, compute_complete.run_if(on_event::<ComputeComplete<Simple>>()))
     .add_systems(Update, close_on_esc)
     // helper to not move the mouse when over egui window
@@ -39,7 +39,7 @@ fn main() {
 }
 
 // AsBindGroupCompute and Resource
-#[derive(Reflect, AsBindGroupCompute, Resource, Clone, InspectorOptions)]
+#[derive(Reflect, AsBindGroup, ExtractResource, Resource, Debug, Clone, InspectorOptions)]
 #[reflect(Resource, InspectorOptions)]
 pub struct Simple {
     
@@ -68,6 +68,7 @@ impl FromWorld for Simple {
             TextureDimension::D2,
             &[255, 0, 0, 255],  // setting to red
             TextureFormat::R32Float,
+            RenderAssetUsages::all(),
         );
         image.texture_descriptor.usage = TextureUsages::COPY_SRC            
         | TextureUsages::STORAGE_BINDING
@@ -98,7 +99,7 @@ fn trigger_computue(
 ) {
     compute.send(ComputeEvent::<Simple> {
         passes: vec![
-            ComputePass {
+            Pass {
                 entry: "main",
                 workgroups: vec![UVec3 {
                     // dispatch size
@@ -142,10 +143,7 @@ fn setup(
 
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Plane {
-                size: 20.0,
-                subdivisions: 10,
-            })),
+            mesh: meshes.add(Plane3d::new(Vec3::Y).mesh().size(20.0, 20.0)),
             material: materials.add(StandardMaterial {
                 base_color: Color::WHITE,
                 base_color_texture: Some(simple.image.clone()),
@@ -160,7 +158,7 @@ fn setup(
 }
 
 // helper fuction to not move the mouse when over egui window
-fn absorb_egui_inputs(mut mouse: ResMut<Input<MouseButton>>, mut contexts: EguiContexts) {
+fn absorb_egui_inputs(mut mouse: ResMut<ButtonInput<MouseButton>>, mut contexts: EguiContexts) {
     if contexts.ctx_mut().is_pointer_over_area() {
         mouse.reset_all();
     }
