@@ -36,7 +36,6 @@ pub struct BufferDimensions {
 pub struct ComputePipeline<T: ComputeTrait> {
     // pipelines ordered by entry point
     pub pipelines: Vec<CachedComputePipelineId>,
-    pub bind_group: Option<BindGroup>,
     pub bind_group_layout: BindGroupLayout,
     pub _marker: PhantomData<T>,
 }
@@ -69,7 +68,6 @@ impl<T: ComputeTrait> FromWorld for ComputePipeline<T> {
         }
 
         Self {
-            bind_group: None,
             bind_group_layout: bind_group_layout,
             pipelines,
             _marker: Default::default(),

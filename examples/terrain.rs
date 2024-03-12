@@ -1,7 +1,7 @@
 // Example with egui inspector
 
 use bevy::{
-    asset::load_internal_asset, pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{extract_resource::ExtractResource, mesh::Indices, render_asset::RenderAssetUsages, render_resource::*, texture::TextureFormatPixelInfo}, window::{close_on_esc, PrimaryWindow}
+    asset::load_internal_asset, pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{extract_resource::ExtractResource, mesh::Indices, render_asset::RenderAssetUsages, render_graph::{RenderGraph, RenderLabel}, render_resource::*, texture::TextureFormatPixelInfo}, window::{close_on_esc, PrimaryWindow}
 };
 use bevy_inspector_egui::{
     bevy_egui::{EguiContext, EguiPlugin},
@@ -36,6 +36,9 @@ pub struct Terrain {
     world_size: u32,
 }
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
+pub struct TerrainLabel;
+
 impl ComputeShader for Terrain {
     fn shader() -> ShaderRef {
         ShaderRef::Handle(SHADER_HANDLE)
@@ -43,6 +46,11 @@ impl ComputeShader for Terrain {
 
     fn entry_points<'a>() -> Vec<&'a str> {
         vec!["main"]
+    }
+
+    fn set_nodes(render_graph: &mut RenderGraph) {
+        render_graph.add_node(TerrainLabel, ComputeNode::<Terrain>::default());
+        render_graph.add_node_edge(TerrainLabel, bevy::render::graph::CameraDriverLabel);
     }
 }
 

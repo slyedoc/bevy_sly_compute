@@ -4,7 +4,7 @@ use crate::ComputeTrait;
 
 /// Data to pass from Render World to App World
 pub struct ComputeMessage<T: ComputeTrait> {
-    pub data: T,
+    pub data: Option<T>,
     pub images: Vec<(Handle<Image>, Vec<u8>)>,
 }
 

@@ -1,7 +1,7 @@
 use std::vec;
 
 use bevy::{
-    core_pipeline::tonemapping::Tonemapping, prelude::*, render::{extract_resource::ExtractResource, render_asset::RenderAssetUsages, render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat, TextureUsages}}, window::close_on_esc
+    core_pipeline::tonemapping::Tonemapping, prelude::*, render::{extract_resource::ExtractResource, render_asset::RenderAssetUsages, render_graph::{RenderGraph, RenderLabel}, render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat, TextureUsages}}, window::close_on_esc
 };
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use bevy_sly_compute::prelude::*;
@@ -81,6 +81,9 @@ impl FromWorld for Simple {
     }
 }
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
+pub struct SimpleLabel;
+
 impl ComputeShader for Simple {
     fn shader() -> ShaderRef {        
         "image.wgsl".into()
@@ -89,7 +92,13 @@ impl ComputeShader for Simple {
     fn entry_points<'a>() -> Vec<&'a str> {
         vec!["main"]
     }
+
+    fn set_nodes(render_graph: &mut RenderGraph) {
+        render_graph.add_node(SimpleLabel, ComputeNode::<Simple>::default());
+        render_graph.add_node_edge(SimpleLabel, bevy::render::graph::CameraDriverLabel);
+    }
 }
+
 
 // helper to trigger compute passes of the correct size
 fn trigger_computue(    

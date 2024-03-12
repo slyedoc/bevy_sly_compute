@@ -1,5 +1,5 @@
 // Most basic use case, use gpu to calculate a value and return it to the cpu.
-use bevy::{prelude::*, render::{extract_resource::ExtractResource, render_resource::AsBindGroup}, window::close_on_esc};
+use bevy::{prelude::*, render::{extract_resource::ExtractResource, render_graph::{RenderGraph, RenderLabel}, render_resource::AsBindGroup}, window::close_on_esc};
 use bevy_inspector_egui::{prelude::*, quick::ResourceInspectorPlugin};
 use bevy_sly_compute::prelude::*;
  
@@ -14,6 +14,9 @@ pub struct Simple {
     vec: Vec<f32>,
 }
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
+pub struct SimpleLabel;
+
 impl ComputeShader for Simple {
     fn shader() -> ShaderRef {
         "basic.wgsl".into() // Asset path to the shader 
@@ -21,7 +24,12 @@ impl ComputeShader for Simple {
 
     fn entry_points<'a>() -> Vec<&'a str> {
         vec!["main"] // same as default
-    }    
+    }
+        
+    fn set_nodes(render_graph: &mut RenderGraph) {
+        render_graph.add_node(SimpleLabel, ComputeNode::<Simple>::default());
+        render_graph.add_node_edge(SimpleLabel, bevy::render::graph::CameraDriverLabel);
+    }
 }
 
 fn main() {
@@ -32,7 +40,7 @@ fn main() {
             ResourceInspectorPlugin::<Simple>::default(), // inspector for Simple
         ))
         
-        .insert_resource( Simple {
+        .insert_resource(Simple {
             uni: 1.0,
             vec: vec![1.0, 2.0, 3.0, 4.0],
         })

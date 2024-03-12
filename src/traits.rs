@@ -1,6 +1,6 @@
 use bevy::{
     prelude::*,
-    render::{extract_resource::ExtractResource, render_resource::{AsBindGroup, PushConstantRange, ShaderDefVal, ShaderRef}},
+    render::{extract_resource::ExtractResource, render_graph::RenderGraph, render_resource::{AsBindGroup, PushConstantRange, ShaderDefVal, ShaderRef}},
 };
 
 // Define a new trait with all the combined requirements
@@ -37,9 +37,12 @@ pub trait ComputeShader: Send + Sync + 'static {
     fn shader_defs<'a>() -> &'a [ShaderDefVal] {
         &[]
     }
+
     fn push_constant_ranges<'a>() -> &'a [PushConstantRange] {
         &[]
     }
+
+    fn set_nodes(render_graph: &mut RenderGraph);
 
     /// By default, the shader entry point is `main`.
     /// You can change it from here.

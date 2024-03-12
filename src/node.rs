@@ -4,19 +4,25 @@ use bevy::{
     prelude::*,
     render::{
         render_asset::RenderAssets,
-        render_graph::{self, RenderLabel},
+        render_graph::{self},
         render_resource::{
-             CachedPipelineState,
-            ComputePassDescriptor, Extent3d, ImageCopyBuffer, ImageDataLayout,
+            CachedPipelineState, ComputePassDescriptor, Extent3d, ImageCopyBuffer, ImageDataLayout,
             OwnedBindingResource, PipelineCache,
-        }, renderer::RenderContext,
+        },
+        renderer::RenderContext,
     },
 };
 
 use crate::{ComputePipeline, ComputeTrait, PreparedCompute, RenderComputePasses};
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
-pub struct ComputeLabel;
+// #[derive(Debug, Hash, Clone, RenderLabel)]
+// pub struct ComputeLabel<T: ComputeTrait>(PhantomData<T>);
+
+// impl<T: ComputeTrait> Default for ComputeLabel<T> {
+//     fn default() -> Self {
+//         Self(PhantomData)
+//     }
+// }
 
 enum ComputeState {
     Loading,
@@ -93,9 +99,12 @@ impl<T: ComputeTrait> render_graph::Node for ComputeNode<T> {
                         .iter()
                         .position(|&x| x == pass.entry)
                         .unwrap_or(0);
-                    let pipeline = pipeline_cache
-                        .get_compute_pipeline(compute_pipelines.pipelines[index])
-                        .unwrap();
+                    let Some(pipeline) =
+                        pipeline_cache.get_compute_pipeline(compute_pipelines.pipelines[index])
+                    else {
+                        return Ok(());
+                    };
+
                     let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor {
                         label: Some(pass.entry),
                         timestamp_writes: None,
@@ -152,4 +161,3 @@ impl<T: ComputeTrait> render_graph::Node for ComputeNode<T> {
         Ok(())
     }
 }
-

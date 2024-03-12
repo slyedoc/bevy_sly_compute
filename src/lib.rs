@@ -1,3 +1,5 @@
+#![feature(iter_collect_into)]
+
 mod traits;
 use std::marker::PhantomData;
 
@@ -15,17 +17,26 @@ pub use events::*;
 
 mod channel;
 
-use bevy::{prelude::*, render::{render_asset::RenderAssets, render_graph::RenderGraph, render_resource::{BufferDescriptor, BufferUsages, Maintain, MapMode}, renderer::RenderDevice, texture::{FallbackImage, TextureFormatPixelInfo}, Extract, Render, RenderApp, RenderSet}};
+use bevy::{
+    prelude::*,
+    render::{
+        render_asset::RenderAssets,
+        render_graph::RenderGraph,
+        render_resource::{BufferDescriptor, BufferUsages, Maintain, MapMode},
+        renderer::RenderDevice,
+        texture::{FallbackImage, TextureFormatPixelInfo},
+        Extract, Render, RenderApp, RenderSet,
+    },
+};
 
 /// Helper module to import most used elements.
 pub mod prelude {
     pub use crate::{
-        ComputePlugin,
         events::{Pass, *},
+        mark_shader_modified,
         node::*,
         traits::*,
-        mark_shader_modified,
-        MainComputePlugin,
+        ComputePlugin, MainComputePlugin,
     };
     // Since these are always used when using this crate
     pub use bevy::render::render_resource::{ShaderRef, ShaderType};
@@ -33,7 +44,6 @@ pub mod prelude {
 
 /// A global plugin, doesn't do much currently
 pub struct MainComputePlugin;
-
 
 impl Plugin for MainComputePlugin {
     fn build(&self, app: &mut App) {
@@ -44,11 +54,9 @@ impl Plugin for MainComputePlugin {
         // HACK: update StandardMaterial when any images are modified
         // currently have no way to update a material that shares an image
         // this is a workaround to mark all materials as modified
-        app.add_systems(First, 
-            (   
-                mark_shader_modified::<StandardMaterial>,
-            )
-            .run_if(on_event::<AssetEvent<Image>>())
+        app.add_systems(
+            First,
+            (mark_shader_modified::<StandardMaterial>,).run_if(on_event::<AssetEvent<Image>>()),
         );
     }
 }
@@ -74,10 +82,13 @@ impl<T: ComputeTrait> Plugin for ComputePlugin<T> {
         // we need some way to safely send data from main app from render app
         let (sender, receiver) = create_compute_channels::<T>();
 
-        app.insert_resource(receiver)            
+        app.insert_resource(receiver)
             .add_event::<ComputeEvent<T>>()
             .add_event::<ComputeComplete<T>>()
-            .add_systems(Last, listen_receiver::<T>.run_if(resource_exists::<T>));
+            .add_systems(Last, listen_receiver::<T>.run_if(resource_exists::<T>))
+            // build event for shader modified
+            .add_event::<ComputeShaderModified<T>>()
+            .add_systems(Update, events::shader_modified::<T>);
 
         let render_app = app.sub_app_mut(RenderApp);
 
@@ -101,6 +112,11 @@ impl<T: ComputeTrait> Plugin for ComputePlugin<T> {
                         .in_set(RenderSet::Cleanup),
                 ),
             );
+
+        // add nodes to render graph
+
+        let mut render_graph = render_app.world.resource_mut::<RenderGraph>();
+        T::set_nodes(&mut render_graph);
     }
 
     fn finish(&self, app: &mut App) {
@@ -108,7 +124,6 @@ impl<T: ComputeTrait> Plugin for ComputePlugin<T> {
         render_app.init_resource::<ComputePipeline<T>>();
     }
 }
-
 
 fn listen_receiver<T: ComputeTrait>(
     mut data: ResMut<T>,
@@ -119,12 +134,16 @@ fn listen_receiver<T: ComputeTrait>(
     mut images: ResMut<Assets<Image>>,
 ) {
     if let Ok(msg) = receiver.try_recv() {
-        *data.bypass_change_detection() = msg.data;
+        // So this is a bit of a hack, most of the time its image data changing, and we dont know if what on T has changed nice our copy
+        // was taken, so dont over write it if you dont have to
+        if let Some(d) = msg.data {
+            *data.bypass_change_detection() = d;
+        }
 
         // update images
-        for (handle, image_data ) in msg.images {
-            let image = images.get_mut(&handle).unwrap();            
-            image.data = image_data;            
+        for (handle, image_data) in msg.images {
+            let image = images.get_mut(&handle).unwrap();
+            image.data = image_data;
             asset_event.send(AssetEvent::Modified { id: handle.id() });
         }
         complete_events.send(ComputeComplete::<T>::default());
@@ -139,10 +158,13 @@ pub fn extract_resource<T: ComputeTrait>(
     mut compute_events: Extract<EventReader<ComputeEvent<T>>>,
     main_resource: Extract<Option<Res<T::Source>>>,
     target_resource: Option<ResMut<T>>,
-    
     images: Extract<Res<Assets<Image>>>,
-    mut render_graph: ResMut<RenderGraph>,
+    mut passes: Local<Vec<Pass>>,
+    mut passes_used: Local<Vec<&'static str>>,
 ) {
+    passes.clear();
+    passes_used.clear();
+
     // extract main resource
     let Some(main_resource) = main_resource.as_ref() else {
         warn_once!("no main resource for compute event");
@@ -150,7 +172,7 @@ pub fn extract_resource<T: ComputeTrait>(
     };
 
     // check passes are valid
-    let passes = compute_events
+    let mut passes = compute_events
         .read()
         .flat_map(|event| event.passes.iter().cloned())
         .filter(|pass| {
@@ -167,7 +189,17 @@ pub fn extract_resource<T: ComputeTrait>(
             });
             valid
         })
-        .collect::<Vec<Pass>>();
+        .collect::<Vec<_>>();
+
+    // remove duplicates events
+    passes.retain(|p| {
+        if !passes_used.contains(&p.entry) {
+            passes_used.push(p.entry);
+            true
+        } else {
+            false
+        }
+    });
 
     // nothing to do, exit
     // TODO: do we need to remove resource?
@@ -175,6 +207,10 @@ pub fn extract_resource<T: ComputeTrait>(
         //commands.remove_resource::<T>();
         commands.remove_resource::<RenderComputePasses<T>>();
         return;
+    }
+
+    if passes.len() > 1 {
+        warn!("multiple passes detected, only first pass will be used");
     }
 
     // extract render world version, and get list of image data
@@ -210,10 +246,6 @@ pub fn extract_resource<T: ComputeTrait>(
         images: image_info,
         _marker: Default::default(),
     });
-    
-    // TODO: pipeline state maybe instead of adding and removing node
-    render_graph.add_node(ComputeLabel, ComputeNode::<T>::default());
-    
 }
 
 fn prepare_bind_group<T: ComputeTrait>(
@@ -271,16 +303,12 @@ fn read_and_send<T: ComputeTrait>(
     mut commands: Commands,
     mut data: ResMut<T>,
     prepared: Res<PreparedCompute<T>>,
-    mut render_graph: ResMut<RenderGraph>,
     render_compute_passes: ResMut<RenderComputePasses<T>>,
     sender: Res<ComputeSender<T>>,
     render_device: Res<RenderDevice>,
-) {
-    let node = render_graph.remove_node(ComputeLabel);
-    if node.is_err() {
-        warn!("failed to remove compute node from render graph");
-    }
-
+) {    
+    info!("reading and sending compute data {:?}", T::label());
+    
     // create buffer slices for storage buffers and images
     let storage_buffer_slices = prepared
         .staging_buffers
@@ -330,7 +358,7 @@ fn read_and_send<T: ComputeTrait>(
             // Clone handle and dim if necessary; assume slice can be copied or cloned as needed
             let padded_data = &image_buffer_slices[index].get_mapped_range();
 
-            // coverted form padded buffer, 
+            // coverted form padded buffer,
             // TODO was reusing image.data, but dont have access to it here
             let mut image_data = Vec::new();
             for row in 0..dim.height {
@@ -344,7 +372,13 @@ fn read_and_send<T: ComputeTrait>(
         .collect::<Vec<_>>();
 
     if let Err(error) = sender.try_send(ComputeMessage::<T> {
-        data: data.clone(),
+        data: if storage_buffer_slices.len() == 0 {
+            debug!("no data to send");
+            None
+        } else {
+            debug!("no data to send");
+            Some(data.clone())
+        },
         images: image_data,
     }) {
         match error {
@@ -358,7 +392,7 @@ fn read_and_send<T: ComputeTrait>(
             // }
         }
     }
-    
+
     commands.remove_resource::<RenderComputePasses<T>>();
     // drop(storage_buffer_slices);
     // drop(image_buffer_slices);
@@ -375,12 +409,9 @@ fn read_and_send<T: ComputeTrait>(
 }
 
 // Hack to mark shader modified on image modified
-pub fn mark_shader_modified<R: Asset>(    
-    mut assets: ResMut<Assets<R>>,
-) {
+pub fn mark_shader_modified<R: Asset>(mut assets: ResMut<Assets<R>>) {
     let ids = assets.ids().collect::<Vec<_>>();
-    for id in ids {   
-        
+    for id in ids {
         assets.queued_events.push(AssetEvent::Modified { id });
     }
 }

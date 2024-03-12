@@ -1,5 +1,5 @@
 // Many ComputeWorkerPlugin working together
-use bevy::{prelude::*, render::{extract_resource::ExtractResource, render_resource::AsBindGroup}, window::close_on_esc};
+use bevy::{prelude::*, render::{extract_resource::ExtractResource, render_graph::{RenderGraph, RenderLabel}, render_resource::AsBindGroup}, window::close_on_esc};
 use bevy_sly_compute::prelude::*;
 
 #[derive(AsBindGroup, ExtractResource, Resource, Clone, Debug)]
@@ -11,9 +11,17 @@ pub struct Simple1 {
     vec: Vec<f32>,
 }
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
+pub struct SimpleLabel1;
+
 impl ComputeShader for Simple1 {
     fn shader() -> ShaderRef {
         "basic.wgsl".into()
+    }
+
+    fn set_nodes(render_graph: &mut RenderGraph) {
+        render_graph.add_node(SimpleLabel1, ComputeNode::<Simple1>::default());
+        render_graph.add_node_edge(SimpleLabel1, bevy::render::graph::CameraDriverLabel);
     }
 }
 
@@ -26,10 +34,19 @@ pub struct Simple2 {
     vec: Vec<f32>,
 }
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
+pub struct SimpleLabel2;
+
 impl ComputeShader for Simple2 {
     fn shader() -> ShaderRef {
         "basic.wgsl".into() // could be different shader
     }
+
+    fn set_nodes(render_graph: &mut RenderGraph) {
+        render_graph.add_node(SimpleLabel2, ComputeNode::<Simple1>::default());
+        render_graph.add_node_edge(SimpleLabel2, bevy::render::graph::CameraDriverLabel);
+    }
+
 }
 
 fn main() {
