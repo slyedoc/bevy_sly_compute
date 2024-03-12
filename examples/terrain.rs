@@ -1,7 +1,7 @@
 // Example with egui inspector
 
 use bevy::{
-    asset::load_internal_asset, pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{mesh::Indices, render_resource::*, texture::TextureFormatPixelInfo}, window::{close_on_esc, PrimaryWindow}
+    asset::load_internal_asset, pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{extract_resource::ExtractResource, mesh::Indices, render_asset::RenderAssetUsages, render_graph::{RenderGraph, RenderLabel}, render_resource::*, texture::TextureFormatPixelInfo}, window::{close_on_esc, PrimaryWindow}
 };
 use bevy_inspector_egui::{
     bevy_egui::{EguiContext, EguiPlugin},
@@ -11,21 +11,15 @@ use bevy_inspector_egui::{
     DefaultInspectorConfigPlugin,
 };
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
-use bevy_sly_compute::prelude::{ComputePass, *};
+use bevy_sly_compute::prelude::*;
 use bevy_xpbd_3d::{math::Scalar, prelude::*};
-use leafwing_input_manager::{common_conditions::*, prelude::*};
 
 const SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(11880782407192052050);
 const TEXTURE_SIZE: u32 = 64; // size of generated texture
 const WORKGROUP_SIZE: u32 = 8; // size of workgroup, shader should match
 
-#[derive(Actionlike, PartialEq, Eq, Hash, Clone, Copy, Debug, Reflect)]
-pub enum AppAction {
-    ToggleWireframe,
-}
 
-
-#[derive(Reflect, AsBindGroupCompute, Resource, Clone, InspectorOptions)]
+#[derive(Reflect, AsBindGroup, ExtractResource, Resource, Debug, Clone, InspectorOptions)]
 #[reflect(Resource, InspectorOptions)]
 pub struct Terrain {
     #[uniform(0)]
@@ -42,6 +36,9 @@ pub struct Terrain {
     world_size: u32,
 }
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
+pub struct TerrainLabel;
+
 impl ComputeShader for Terrain {
     fn shader() -> ShaderRef {
         ShaderRef::Handle(SHADER_HANDLE)
@@ -49,6 +46,11 @@ impl ComputeShader for Terrain {
 
     fn entry_points<'a>() -> Vec<&'a str> {
         vec!["main"]
+    }
+
+    fn set_nodes(render_graph: &mut RenderGraph) {
+        render_graph.add_node(TerrainLabel, ComputeNode::<Terrain>::default());
+        render_graph.add_node_edge(TerrainLabel, bevy::render::graph::CameraDriverLabel);
     }
 }
 
@@ -65,6 +67,7 @@ impl FromWorld for Terrain {
             // setting to red
             &[255, 0, 0, 255],
             TextureFormat::Rgba8Unorm,
+            RenderAssetUsages::all(),
         );
         // set the usage
         image.texture_descriptor.usage = TextureUsages::COPY_SRC
@@ -93,31 +96,23 @@ fn main() {
         PhysicsPlugins::default(), // Physics
         WireframePlugin, // Debuging wireframe
         PanOrbitCameraPlugin, // Camera control        
-        ComputeWorkerPlugin::<Terrain>::default(), // Our compute Plugin
+        ComputePlugin::<Terrain>::default(), // Our compute Plugin
         TerrainInspectorPlugin, // Custom inspector below
     ))
     .init_resource::<Terrain>()
     .register_type::<Terrain>()
     .insert_resource(WireframeConfig {
-        global: false,
+        global: true,
         default_color: Color::WHITE,
     })
-    // actions
-    .init_resource::<ActionState<AppAction>>()
-    .insert_resource(
-        InputMap::default()
-            .insert(KeyCode::F1, AppAction::ToggleWireframe)
-            .build(),
-    )
-    .add_plugins(InputManagerPlugin::<AppAction>::default())
 
     // systems
     .add_systems(Startup, setup)
-    .add_systems(Update, trigger_computue.run_if(resource_changed::<Terrain>()) )
+    .add_systems(Update, trigger_computue.run_if(resource_changed::<Terrain>) )
     .add_systems(Update, close_on_esc)
     .add_systems(
         Update,
-        toggle_wireframe.run_if(action_just_pressed(AppAction::ToggleWireframe)),
+        toggle_wireframe,
     )
     .add_systems(Last, process_terrain.run_if(on_event::<ComputeComplete<Terrain>>()));
 
@@ -133,7 +128,7 @@ fn trigger_computue(
 ) {   
     compute_terrain.send(ComputeEvent::<Terrain> {
         passes: vec![
-            ComputePass {
+            Pass {
                 entry: "main",
                 workgroups: vec![UVec3 {
                     // dispatch size
@@ -154,6 +149,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    images: Res<Assets<Image>>,
     terrain: Res<Terrain>,
 ) {
     commands.spawn((
@@ -174,10 +170,7 @@ fn setup(
     commands.spawn((
         PbrBundle {
             // mesh will be updated by process_terrain
-            mesh: meshes.add(Mesh::from(shape::Plane {
-                size: 20.0,
-                subdivisions: 10,
-            })),
+            mesh: meshes.add(terrain.generate_mesh(&images)),
             material: materials.add(StandardMaterial {
                 // image will be updated by process_terrain
                 base_color_texture: Some(terrain.image.clone()),
@@ -211,8 +204,13 @@ fn process_terrain(
     *collider = terrain.generate_collider(&images);
 }
 
-fn toggle_wireframe(mut wireframe_config: ResMut<WireframeConfig>) {
-    wireframe_config.global = !wireframe_config.global;
+fn toggle_wireframe(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut wireframe_config: ResMut<WireframeConfig>
+) {
+    if keys.just_pressed(KeyCode::F1) {
+        wireframe_config.global = !wireframe_config.global;
+    }    
 }
 
 
@@ -275,8 +273,8 @@ impl Terrain {
         }
 
         // build our mesh
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-        mesh.set_indices(Some(Indices::U32(indices)));
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD);
+        mesh.insert_indices(Indices::U32(indices));
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
 
         // compute normals
