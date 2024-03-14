@@ -1,23 +1,27 @@
 // Example with egui inspector
 
 use bevy::{
-    asset::load_internal_asset, pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{extract_resource::ExtractResource, mesh::Indices, render_asset::RenderAssetUsages, render_graph::{RenderGraph, RenderLabel}, render_resource::*, texture::TextureFormatPixelInfo}, window::{close_on_esc, PrimaryWindow}
-};
-use bevy_inspector_egui::{
-    bevy_egui::{EguiContext, EguiPlugin},
-    bevy_inspector, egui,
-    inspector_options::std_options::NumberDisplay,
+    pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
-    DefaultInspectorConfigPlugin,
+    render::{
+        extract_resource::ExtractResource,
+        mesh::Indices,
+        render_asset::RenderAssetUsages,
+        render_graph::{RenderGraph, RenderLabel},
+        render_resource::*,
+        texture::TextureFormatPixelInfo,
+    },
+    window::{close_on_esc, PrimaryWindow},
+};
+use bevy_inspector_egui::{    
+    bevy_egui::EguiContext, bevy_inspector, egui, inspector_options::std_options::NumberDisplay, prelude::*, quick::ResourceInspectorPlugin
 };
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use bevy_sly_compute::prelude::*;
 use bevy_xpbd_3d::{math::Scalar, prelude::*};
 
-const SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(11880782407192052050);
 const TEXTURE_SIZE: u32 = 64; // size of generated texture
 const WORKGROUP_SIZE: u32 = 8; // size of workgroup, shader should match
-
 
 #[derive(Reflect, AsBindGroup, ExtractResource, Resource, Debug, Clone, InspectorOptions)]
 #[reflect(Resource, InspectorOptions)]
@@ -25,7 +29,7 @@ pub struct Terrain {
     #[uniform(0)]
     #[inspector(min = 0.0, max = 10.0, display = NumberDisplay::Slider)]
     scale: f32,
-    
+
     // staging
     #[storage_texture(1, image_format = Rgba8Unorm, access = ReadWrite, staging)]
     image: Handle<Image>,
@@ -41,11 +45,7 @@ pub struct TerrainLabel;
 
 impl ComputeShader for Terrain {
     fn shader() -> ShaderRef {
-        ShaderRef::Handle(SHADER_HANDLE)
-    }
-
-    fn entry_points<'a>() -> Vec<&'a str> {
-        vec!["main"]
+        "terrain.wgsl".into()
     }
 
     fn set_nodes(render_graph: &mut RenderGraph) {
@@ -87,59 +87,55 @@ impl FromWorld for Terrain {
     }
 }
 
-
 fn main() {
     let mut app = App::new();
 
     app.add_plugins((
         DefaultPlugins,
-        PhysicsPlugins::default(), // Physics
-        WireframePlugin, // Debuging wireframe
-        PanOrbitCameraPlugin, // Camera control        
+        PhysicsPlugins::default(),           // Physics
+        WireframePlugin,                     // Debuging wireframe
+        PanOrbitCameraPlugin,                // Camera control
         ComputePlugin::<Terrain>::default(), // Our compute Plugin
-        TerrainInspectorPlugin, // Custom inspector below
+        ResourceInspectorPlugin::<Terrain>::default(), // inspector for Terrain
     ))
     .init_resource::<Terrain>()
     .register_type::<Terrain>()
     .insert_resource(WireframeConfig {
-        global: true,
+        // uncomment to enable wireframe by default
+        // global: true, 
         default_color: Color::WHITE,
+        ..default()
     })
-
     // systems
     .add_systems(Startup, setup)
-    .add_systems(Update, trigger_computue.run_if(resource_changed::<Terrain>) )
-    .add_systems(Update, close_on_esc)
     .add_systems(
         Update,
-        toggle_wireframe,
+        trigger_computue.run_if(
+            resource_changed::<Terrain>.or_else(on_event::<ComputeShaderModified<Terrain>>()),
+        ),
     )
-    .add_systems(Last, process_terrain.run_if(on_event::<ComputeComplete<Terrain>>()));
-
-    // loading internal asset, like editing files side by side
-    load_internal_asset!(app, SHADER_HANDLE, "terrain.wgsl", Shader::from_wgsl);
+    .add_systems(Update, close_on_esc)
+    .add_systems(Update, toggle_wireframe)
+    .add_systems(
+        Last,
+        process_terrain.run_if(on_event::<ComputeComplete<Terrain>>()),
+    )
+    // ui
+    .add_systems(Update, terrain_inspector_ui);
 
     app.run();
 }
 
 // helper to trigger compute passes of the correct size
-fn trigger_computue(    
-    mut compute_terrain: EventWriter<ComputeEvent<Terrain>>,
-) {   
-    compute_terrain.send(ComputeEvent::<Terrain> {
-        passes: vec![
-            Pass {
-                entry: "main",
-                workgroups: vec![UVec3 {
-                    // dispatch size
-                    x: TEXTURE_SIZE / WORKGROUP_SIZE,
-                    y: TEXTURE_SIZE / WORKGROUP_SIZE,
-                    z: 1,
-                }],
-            },
-        ],
-        ..default()
-    });
+fn trigger_computue(mut compute_terrain: EventWriter<ComputeEvent<Terrain>>) {
+
+    let dispatch_size = UVec3 {
+        // dispatch size
+        x: TEXTURE_SIZE / WORKGROUP_SIZE,
+        y: TEXTURE_SIZE / WORKGROUP_SIZE,
+        z: 1,
+    };
+    compute_terrain.send(ComputeEvent::<Terrain>::new(dispatch_size));
 }
 
 #[derive(Component)]
@@ -189,7 +185,7 @@ fn setup(
 fn process_terrain(
     terrain: Res<Terrain>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut images: ResMut<Assets<Image>>,    
+    mut images: ResMut<Assets<Image>>,
     mut query: Query<(&mut Handle<Mesh>, &mut Collider), With<Ground>>,
 ) {
     let Ok((mut mesh_handle, mut collider)) = query.get_single_mut() else {
@@ -206,15 +202,12 @@ fn process_terrain(
 
 fn toggle_wireframe(
     keys: Res<ButtonInput<KeyCode>>,
-    mut wireframe_config: ResMut<WireframeConfig>
+    mut wireframe_config: ResMut<WireframeConfig>,
 ) {
     if keys.just_pressed(KeyCode::F1) {
         wireframe_config.global = !wireframe_config.global;
-    }    
+    }
 }
-
-
-
 
 impl Terrain {
     fn generate_mesh(&self, images: &Assets<Image>) -> Mesh {
@@ -273,7 +266,10 @@ impl Terrain {
         }
 
         // build our mesh
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD);
+        let mut mesh = Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD,
+        );
         mesh.insert_indices(Indices::U32(indices));
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
 
@@ -281,7 +277,7 @@ impl Terrain {
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
         mesh.duplicate_vertices();
         mesh.compute_flat_normals();
-        
+
         mesh
     }
 
@@ -308,26 +304,6 @@ impl Terrain {
             heights.push(row);
         }
         Collider::heightfield(heights, scale)
-    }
-}
-
-
-
-// This is not ideal in a example
-// but small window size from ResourceInspectorPlugin was driving me nuts
-// also added button to trigger compute
-struct TerrainInspectorPlugin;
-
-impl Plugin for TerrainInspectorPlugin {
-    fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<DefaultInspectorConfigPlugin>() {
-            app.add_plugins(DefaultInspectorConfigPlugin);
-        }
-        if !app.is_plugin_added::<EguiPlugin>() {
-            app.add_plugins(EguiPlugin);
-        }
-
-        app.add_systems(Update, terrain_inspector_ui);
     }
 }
 

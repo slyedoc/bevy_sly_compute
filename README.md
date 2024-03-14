@@ -18,7 +18,7 @@ See [AsBindGroup](https://docs.rs/bevy/latest/bevy/render/render_resource/trait.
 
 The only additional option is 'staging', which when used with ComputePlugin will arrange to have copied back to the app world after the compute shader is run.
 
-- uniform - TODO (don't find myself needing staging for this)
+- uniform - TODO (haven't found a need for this myself)
 - storage - 'staging' - have resource updated after compute
   - ```Vec<T>``` works if ```T: Pod```, Color doesn't work
   - TODO: Look into encase ReadFrom and WriteTo
@@ -30,9 +30,9 @@ The only additional option is 'staging', which when used with ComputePlugin will
 See Examples:
 
 - [basic](examples/basic.rs)-[wgsl](assets/basic.wgsl) - The Simplest use case
-- [image](examples/image.rs)-[wgsl](assets/image.wgsl) - Compute image and use it in material
+- [image](examples/image.rs)-[wgsl](assets/image.wgsl) - Compute image and use it in material, and save it to file
 - [many](examples/many.rs)-(uses basic) - Multiple ComputeWorkerPlugins
-- [terrain](examples/terrain.rs)-[wgsl](examples/terrain.wgsl) - Egui inspector with embedded compute shader, generates mesh from image and collider
+- [terrain](examples/terrain.rs)-[wgsl](examples/terrain.wgsl) - Egui inspector with embedded compute shader, generates mesh and collider from image
 
 ### TODO
 

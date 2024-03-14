@@ -90,6 +90,7 @@ impl ComputeShader for Simple {
         "image.wgsl".into()
     }
 
+    // Here we can wire up the render graph to control when the compute shader is dispatched
     fn set_nodes(render_graph: &mut RenderGraph) {
         render_graph.add_node(SimpleLabel, ComputeNode::<Simple>::default());
         render_graph.add_node_edge(SimpleLabel, bevy::render::graph::CameraDriverLabel);
@@ -122,13 +123,13 @@ fn trigger_computue(
     //compute.send(ComputeEvent::<Simple>::new(dispatch_size));    
 }
 
-// Do something when compute is complete
-// here we will save the image to a file
+// Do something when compute is complete, where we will save the image
+// You normally wouldnt save image everytime, but its an example
 fn compute_complete(
     simple: Res<Simple>,
     images: Res<Assets<Image>>
 ) {
-
+    
     let path = Path::new("image.png");
     let format = ImageFormat::Png.as_image_crate_format().unwrap();
 
