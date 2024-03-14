@@ -1,12 +1,13 @@
-use std::vec;
+// Generate an image and save it to a file
 
+use std::{path::Path, vec};
 use bevy::{
-    core_pipeline::tonemapping::Tonemapping, prelude::*, render::{extract_resource::ExtractResource, render_asset::RenderAssetUsages, render_graph::{RenderGraph, RenderLabel}, render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat, TextureUsages}}, window::close_on_esc
+    core_pipeline::tonemapping::Tonemapping, prelude::*, render::{extract_resource::ExtractResource, render_asset::RenderAssetUsages, render_graph::{RenderGraph, RenderLabel}, render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat, TextureUsages}, texture::ImageFormat},
 };
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use bevy_sly_compute::prelude::*;
 use bevy_inspector_egui::{
-    bevy_egui::{self, EguiContexts}, prelude::*, quick::ResourceInspectorPlugin
+    prelude::*, quick::ResourceInspectorPlugin
 };
 
 const TEXTURE_SIZE: u32 = 1024;
@@ -22,17 +23,17 @@ fn main() {
     ))
     .init_resource::<Simple>()
     .register_type::<Simple>()
-    .add_systems(Startup, setup)
-    .add_systems(Update, trigger_computue.run_if(resource_changed::<Simple>) ) // run compute when resource changes
-    .add_systems(Last, compute_complete.run_if(on_event::<ComputeComplete<Simple>>()))
-    .add_systems(Update, close_on_esc)
-    // helper to not move the mouse when over egui window
-    .add_systems(
-        PreUpdate,
-        (absorb_egui_inputs)
-                .after(bevy_egui::systems::process_input_system)
-                .before(bevy_egui::EguiSet::BeginFrame),
+    //run startup and trigger compute shader on start
+    .add_systems(Startup, (setup, trigger_computue).chain()) 
+
+    // run compute when resource changes or compute shader is modified
+    .add_systems(Update, trigger_computue
+        .run_if(resource_changed::<Simple>
+            .or_else(on_event::<ComputeShaderModified<Simple>>())
+        )
     )
+    // Do something when compute is complete
+    .add_systems(Last, compute_complete.run_if(on_event::<ComputeComplete<Simple>>()))    
     .run();
 }
 
@@ -64,7 +65,7 @@ impl FromWorld for Simple {
                 depth_or_array_layers: 1,
             },
             TextureDimension::D2,
-            &[255, 0, 0, 255],  // setting to red
+            &[0, 0, 0, 255],  // setting to red
             TextureFormat::Rgba8Unorm,
             RenderAssetUsages::all(),
         );
@@ -89,10 +90,6 @@ impl ComputeShader for Simple {
         "image.wgsl".into()
     }
 
-    fn entry_points<'a>() -> Vec<&'a str> {
-        vec!["main"]
-    }
-
     fn set_nodes(render_graph: &mut RenderGraph) {
         render_graph.add_node(SimpleLabel, ComputeNode::<Simple>::default());
         render_graph.add_node_edge(SimpleLabel, bevy::render::graph::CameraDriverLabel);
@@ -104,28 +101,56 @@ impl ComputeShader for Simple {
 fn trigger_computue(    
     mut compute: EventWriter<ComputeEvent<Simple>>,
 ) {
+    // Size of the dispatch, here we are computing the entire texture
+    let dispatch_size = UVec3 { 
+        // dispatch size
+        x: TEXTURE_SIZE / WORKGROUP_SIZE,
+        y: TEXTURE_SIZE / WORKGROUP_SIZE,
+        z: 1,
+    };
+    // You can define the many passes and entry points if you want
     compute.send(ComputeEvent::<Simple> {
         passes: vec![
             Pass {
-                entry: "main",
-                workgroups: vec![UVec3 {
-                    // dispatch size
-                    x: TEXTURE_SIZE / WORKGROUP_SIZE,
-                    y: TEXTURE_SIZE / WORKGROUP_SIZE,
-                    z: 1,
-                }],
+                entry: "main", // entry point to the shader
+                workgroups: vec![dispatch_size],
             },
         ],
         ..default()
     });
+    // There are a few helper functions to make this more concise if you dont need all the options
+    //compute.send(ComputeEvent::<Simple>::new(dispatch_size));    
 }
 
-fn compute_complete() {
-    // do anything you like here       
-}
+// Do something when compute is complete
+// here we will save the image to a file
+fn compute_complete(
+    simple: Res<Simple>,
+    images: Res<Assets<Image>>
+) {
 
-#[derive(Component)]
-pub struct Target;
+    let path = Path::new("image.png");
+    let format = ImageFormat::Png.as_image_crate_format().unwrap();
+
+    info!("Compute complete, saving {path:?} as {format:?}");
+    
+    // get copy of the image from assets
+    let image = images.get(simple.image.clone())
+        .unwrap()
+        .clone();
+
+    // save the image to a file
+    match image.try_into_dynamic() {
+        Ok(dyn_img) => {
+            let img = dyn_img.to_rgb8();
+            match img.save_with_format(&path, format) {
+                Ok(_) => info!("Image saved to {}", path.display()),
+                Err(e) => error!("Cannot save image, IO error: {e}"),
+            }
+        }
+        Err(e) => error!("Cannot save image, unknown format: {e}"),
+    }
+}
 
 fn setup(
     mut commands: Commands,
@@ -148,11 +173,13 @@ fn setup(
         PanOrbitCamera::default(),
     ));
 
+    // display Handle<Image> 
     commands.spawn((
         PbrBundle {
             mesh: meshes.add(Plane3d::new(Vec3::Y).mesh().size(20.0, 20.0)),                
             material: materials.add(StandardMaterial {
                 base_color: Color::WHITE,
+                
                 base_color_texture: Some(simple.image.clone()),
                 unlit: true,
                 ..Default::default()
@@ -160,13 +187,6 @@ fn setup(
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
             ..Default::default()
         },
-        Target,
     )); 
 }
 
-// helper fuction to not move the mouse when over egui window
-fn absorb_egui_inputs(mut mouse: ResMut<ButtonInput<MouseButton>>, mut contexts: EguiContexts) {
-    if contexts.ctx_mut().is_pointer_over_area() {
-        mouse.reset_all();
-    }
-}

@@ -125,6 +125,14 @@ impl<T: ComputeTrait> Plugin for ComputePlugin<T> {
     }
 }
 
+// Hack to mark asset modified so they will noice there Handle<Image> have been modified
+pub fn mark_shader_modified<R: Asset>(mut assets: ResMut<Assets<R>>) {
+    let ids = assets.ids().collect::<Vec<_>>();
+    for id in ids {
+        assets.queued_events.push(AssetEvent::Modified { id });
+    }
+}
+
 fn listen_receiver<T: ComputeTrait>(
     mut data: ResMut<T>,
     receiver: Res<ComputeReceiver<T>>,
@@ -152,7 +160,7 @@ fn listen_receiver<T: ComputeTrait>(
 
 // Based on ExtractResourcePlugin::<T>::default(), but we only want extract when we have a ComputeEvent
 // Also extract passes from ComputeEvent into RenderComputePasses, and grab image handles and dimensions
-// TODO: make a new trait?
+// TODO: make a new trait? We are doing more work in extract than we should
 pub fn extract_resource<T: ComputeTrait>(
     mut commands: Commands,
     mut compute_events: Extract<EventReader<ComputeEvent<T>>>,
@@ -209,10 +217,7 @@ pub fn extract_resource<T: ComputeTrait>(
         return;
     }
 
-    if passes.len() > 1 {
-        warn!("multiple passes detected, only first pass will be used");
-    }
-
+ 
     // extract render world version, and get list of image data
     // TODO: I would love to reuse the image.data, but I dont have access to it here,
     // so creating new vec and sending it back
@@ -306,9 +311,7 @@ fn read_and_send<T: ComputeTrait>(
     render_compute_passes: ResMut<RenderComputePasses<T>>,
     sender: Res<ComputeSender<T>>,
     render_device: Res<RenderDevice>,
-) {    
-    info!("reading and sending compute data {:?}", T::label());
-    
+) {      
     // create buffer slices for storage buffers and images
     let storage_buffer_slices = prepared
         .staging_buffers
@@ -394,6 +397,9 @@ fn read_and_send<T: ComputeTrait>(
     }
 
     commands.remove_resource::<RenderComputePasses<T>>();
+
+    // TODO: havent noticed any issues without explicitly removing these
+    // need to check this
     // drop(storage_buffer_slices);
     // drop(image_buffer_slices);
 
@@ -408,10 +414,4 @@ fn read_and_send<T: ComputeTrait>(
     //         complete_events.send(ComputeComplete::<T>::default());
 }
 
-// Hack to mark shader modified on image modified
-pub fn mark_shader_modified<R: Asset>(mut assets: ResMut<Assets<R>>) {
-    let ids = assets.ids().collect::<Vec<_>>();
-    for id in ids {
-        assets.queued_events.push(AssetEvent::Modified { id });
-    }
-}
+

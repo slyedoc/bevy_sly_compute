@@ -19,13 +19,10 @@ pub struct SimpleLabel;
 
 impl ComputeShader for Simple {
     fn shader() -> ShaderRef {
-        "basic.wgsl".into() // Asset path to the shader 
+        "basic.wgsl".into() 
     }
-
-    fn entry_points<'a>() -> Vec<&'a str> {
-        vec!["main"] // same as default
-    }
-        
+    
+    // set up render graph to control execution order
     fn set_nodes(render_graph: &mut RenderGraph) {
         render_graph.add_node(SimpleLabel, ComputeNode::<Simple>::default());
         render_graph.add_node_edge(SimpleLabel, bevy::render::graph::CameraDriverLabel);
@@ -63,7 +60,6 @@ fn trigger_compute(
 }
 
 fn compute_complete( simple: Res<Simple> ) {    
-    dbg!("compute complete");
     dbg!(&simple);
 }
 

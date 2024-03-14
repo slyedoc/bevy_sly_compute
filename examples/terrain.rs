@@ -281,27 +281,7 @@ impl Terrain {
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
         mesh.duplicate_vertices();
         mesh.compute_flat_normals();
-
-        // Smooth
-        // let mut normals: Vec<[f32; 3]> = Vec::with_capacity(num_vertices);
-        // for y in 0..size {
-        //     for x in 0..size {
-        //         let pos: Vec3 = positions[(y * size + x) as usize].into();
-        //         if x < size - 1 && y < size - 1 {
-        //             let pos_right: Vec3 = positions[(y * size + x + 1) as usize].into();
-        //             let pos_up: Vec3 = positions[((y + 1) * size + x) as usize].into();
-        //             let tangent1 = pos_right - pos;
-        //             let tangent2 = pos_up - pos;
-        //             let normal = tangent2.cross(tangent1);
-        //             normals.push(normal.normalize().into());
-        //         } else {
-        //             normals.push(Vec3::Y.into());
-        //         }
-        //     }
-        // }
-        // mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-        // mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-
+        
         mesh
     }
 
@@ -330,6 +310,9 @@ impl Terrain {
         Collider::heightfield(heights, scale)
     }
 }
+
+
+
 // This is not ideal in a example
 // but small window size from ResourceInspectorPlugin was driving me nuts
 // also added button to trigger compute
