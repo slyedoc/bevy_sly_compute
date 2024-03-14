@@ -15,9 +15,12 @@ fn main(
 
     let uv_scale = vec2<f32>(f32(num_workgroups.x) * 8.0, f32(num_workgroups.y) * 8.0);
     let uv = vec2<f32>(f32(invocation_id.x) / uv_scale.x, 1.0 - f32(invocation_id.y) / uv_scale.y);
+    
+    // create our height map, only using red channel
+    // since are are using rgba8 values need to be 0-1
+    
+    // for now just using sin waves, but any noise or function can be used
     var pi = 3.141592653589793;   
-
-    // sin waves
     let wave = sin(uv.x * pi * scale) * 0.5 + 0.5;
     let c = vec4<f32>(wave, 0.0, 0.0, 1.0);
 
