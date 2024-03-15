@@ -25,14 +25,22 @@ The only additional option is 'staging', which when used with ComputePlugin will
 - storage_texture - 'staging' - image transfered after compute and ```Assets<Image>``` updated with AssetModified event
 - buffer - TODO
 
+## Issues
+
+[Github issues](https://github.com/slyedoc/bevy_sly_compute/issues)
+
 ## Examples
 
 See Examples:
 
+
+
 - [basic](examples/basic.rs)-[wgsl](assets/basic.wgsl) - The Simplest use case
-- [image](examples/image.rs)-[wgsl](assets/image.wgsl) - Compute image and use it in material, and save it to file
+- [image](examples/image.rs)-[wgsl](assets/image.wgsl) - Compute image and use it in material, and save image it to file
+- [terrain](examples/terrain.rs) - generates mesh and collider from image, brush to let you paint on it
+- [paint](examples/paint.rs) - (doesn't use staging), lets you paint to different standard materials entities
+
 - [many](examples/many.rs)-(uses basic) - Multiple ComputeWorkerPlugins
-- [terrain](examples/terrain.rs)-[wgsl](examples/terrain.wgsl) - Egui inspector with embedded compute shader, generates mesh and collider from image
 
 ### TODO
 

@@ -1,312 +1,256 @@
-// Example with egui inspector
+mod common_helper;
+mod terrain_resources;
 
 use bevy::{
-    pbr::wireframe::{WireframeConfig, WireframePlugin},
-    prelude::*,
-    render::{
-        extract_resource::ExtractResource,
-        mesh::Indices,
-        render_asset::RenderAssetUsages,
-        render_graph::{RenderGraph, RenderLabel},
-        render_resource::*,
-        texture::TextureFormatPixelInfo,
-    },
-    window::{close_on_esc, PrimaryWindow},
+    pbr::wireframe::{WireframeConfig, WireframePlugin}, prelude::*, render::{render_asset::RenderAssetUsages, render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages}}, window::PrimaryWindow
 };
-use bevy_inspector_egui::{    
-    bevy_egui::EguiContext, bevy_inspector, egui, inspector_options::std_options::NumberDisplay, prelude::*, quick::ResourceInspectorPlugin
+use bevy_inspector_egui::{
+    bevy_egui::EguiContext, bevy_inspector, egui, quick::StateInspectorPlugin,
 };
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use bevy_sly_compute::prelude::*;
-use bevy_xpbd_3d::{math::Scalar, prelude::*};
+use bevy_xpbd_3d::prelude::*;
 
-const TEXTURE_SIZE: u32 = 64; // size of generated texture
-const WORKGROUP_SIZE: u32 = 8; // size of workgroup, shader should match
+// Our resources and plugins
+use common_helper::{
+    cursor::CursorPlugin, cycle_app_state, toggle_wireframe, wake_all_sleeping_bodies, AppState
+};
+use terrain_resources::{
+    brush::{self, HeightBrush},
 
-#[derive(Reflect, AsBindGroup, ExtractResource, Resource, Debug, Clone, InspectorOptions)]
-#[reflect(Resource, InspectorOptions)]
-pub struct Terrain {
-    #[uniform(0)]
-    #[inspector(min = 0.0, max = 10.0, display = NumberDisplay::Slider)]
-    scale: f32,
+    height_gen::HeightGen,
+    mesh_config::TerrainMeshConfig,
+};
 
-    // staging
-    #[storage_texture(1, image_format = Rgba8Unorm, access = ReadWrite, staging)]
-    image: Handle<Image>,
+use crate::common_helper::MainCamera;
 
-    // how big the chunk in world units
-    #[uniform(2)]
-    #[inspector(min = 1, max = 50, display = NumberDisplay::Slider)]
-    world_size: u32,
-}
+// Sizes of the textures we will be using
+const TEXTURE_SIZE: usize = 1024;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
-pub struct TerrainLabel;
+// Size of workgroup, shader should match,
+const WORKGROUP_SIZE: u32 = 8; // @workgroup_size(8, 8, 1)
+                               // Note: I have done almost no testing on workgroup size and is an entire topic on its own
 
-impl ComputeShader for Terrain {
-    fn shader() -> ShaderRef {
-        "terrain.wgsl".into()
-    }
+// In this example our dispatch size let us cover the entire texture,
+// it completely configurable on per pass per dispatch basis
+const DISPATCH_SIZE: UVec3 = UVec3 {
+    x: TEXTURE_SIZE as u32 / WORKGROUP_SIZE,
+    y: TEXTURE_SIZE as u32 / WORKGROUP_SIZE,
+    z: 1,
+};
 
-    fn set_nodes(render_graph: &mut RenderGraph) {
-        render_graph.add_node(TerrainLabel, ComputeNode::<Terrain>::default());
-        render_graph.add_node_edge(TerrainLabel, bevy::render::graph::CameraDriverLabel);
-    }
-}
+// Marker for our ground
+#[derive(Component)]
+pub struct Ground;
 
-impl FromWorld for Terrain {
-    fn from_world(world: &mut World) -> Self {
-        // Create a new red image
-        let mut image = Image::new_fill(
-            Extent3d {
-                width: TEXTURE_SIZE,
-                height: TEXTURE_SIZE,
-                depth_or_array_layers: 1,
-            },
-            TextureDimension::D2,
-            // setting to red
-            &[255, 0, 0, 255],
-            TextureFormat::Rgba8Unorm,
-            RenderAssetUsages::all(),
-        );
-        // set the usage
-        image.texture_descriptor.usage = TextureUsages::COPY_SRC
-            | TextureUsages::COPY_DST
-            | TextureUsages::STORAGE_BINDING
-            | TextureUsages::TEXTURE_BINDING;
-
-        // add the image to the world
-        let mut images = world.resource_mut::<Assets<Image>>();
-        let image_handle = images.add(image);
-
-        Self {
-            scale: 1.0,
-            image: image_handle,
-            world_size: 10,
-        }
-    }
-}
 
 fn main() {
-    let mut app = App::new();
+    App::new()
+        .init_state::<AppState>()
+        .add_plugins((
+            // External plugins
+            DefaultPlugins,
+            PhysicsPlugins::default(), // Physics
+            PhysicsDebugPlugin::default(),
+            WireframePlugin,                             // Debuging wireframe
+            PanOrbitCameraPlugin,                        // Camera control
+            StateInspectorPlugin::<AppState>::default(), // Ui for app state
+            
+            // Our plugins
+            CursorPlugin, // will send events with entity and position on mouse position
 
-    app.add_plugins((
-        DefaultPlugins,
-        PhysicsPlugins::default(),           // Physics
-        WireframePlugin,                     // Debuging wireframe
-        PanOrbitCameraPlugin,                // Camera control
-        ComputePlugin::<Terrain>::default(), // Our compute Plugin
-        ResourceInspectorPlugin::<Terrain>::default(), // inspector for Terrain
-    ))
-    .init_resource::<Terrain>()
-    .register_type::<Terrain>()
-    .insert_resource(WireframeConfig {
-        // uncomment to enable wireframe by default
-        // global: true, 
-        default_color: Color::WHITE,
-        ..default()
-    })
-    // systems
-    .add_systems(Startup, setup)
-    .add_systems(
-        Update,
-        trigger_computue.run_if(
-            resource_changed::<Terrain>.or_else(on_event::<ComputeShaderModified<Terrain>>()),
-        ),
-    )
-    .add_systems(Update, close_on_esc)
-    .add_systems(Update, toggle_wireframe)
-    .add_systems(
-        Last,
-        process_terrain.run_if(on_event::<ComputeComplete<Terrain>>()),
-    )
-    // ui
-    .add_systems(Update, terrain_inspector_ui);
-
-    app.run();
+            // Our compute plugins, resources with compute shaders
+            ComputePlugin::<HeightGen>::default(), // generates random terrain
+            ComputePlugin::<HeightBrush>::default(), // our brush
+        ))        
+        // some settings for our terrain generation from image
+        .init_resource::<TerrainMeshConfig>()
+        // Create our image, use it to create our resources
+        // and setup camera and lighting
+        .add_systems(Startup, setup)
+        .add_systems(
+            Update,            
+            // Height Gen - trigger compute shader on change or asset reload
+            // Note: this will overwrite current image, if you wanted to persist changes
+            // the brush made, you would need 2 more images, one for the brush and 
+            // one where you merge them together
+            height_compute.run_if(
+                resource_changed::<HeightGen>
+                    .or_else(on_event::<ComputeShaderModified<HeightGen>>()),
+            ),
+        )
+        .add_systems(
+            Update,
+            (
+                // Most import part of the brush, will draw brush position
+                // and trigger compute shader on click
+                brush::brush_active::<Ground>,
+                // control the brush settings
+                brush::brush_resize,
+                brush::brush_stregnth_toggle,
+            )
+                .run_if(in_state(AppState::Brush)),
+        )
+        .add_systems(
+            Update,
+            (process_terrain, wake_all_sleeping_bodies).chain().run_if(
+                resource_changed::<TerrainMeshConfig>
+                    .or_else(image_updated),
+            ),
+        )
+        // UI and debug
+        .insert_resource(WireframeConfig {
+            default_color: Color::WHITE,
+            ..default()
+        })
+        .add_systems(
+            Update,
+            (terrain_inspector_ui, toggle_wireframe, cycle_app_state),
+        )
+        .register_type::<HeightGen>()
+        .register_type::<TerrainMeshConfig>()
+        .run();
 }
-
-// helper to trigger compute passes of the correct size
-fn trigger_computue(mut compute_terrain: EventWriter<ComputeEvent<Terrain>>) {
-
-    let dispatch_size = UVec3 {
-        // dispatch size
-        x: TEXTURE_SIZE / WORKGROUP_SIZE,
-        y: TEXTURE_SIZE / WORKGROUP_SIZE,
-        z: 1,
-    };
-    compute_terrain.send(ComputeEvent::<Terrain>::new(dispatch_size));
-}
-
-#[derive(Component)]
-struct Ground;
 
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    images: Res<Assets<Image>>,
-    terrain: Res<Terrain>,
+    mut images: ResMut<Assets<Image>>,
+    terrain_config: Res<TerrainMeshConfig>,
+    mut config_store: ResMut<GizmoConfigStore>,
+    mut compute_terrain: EventWriter<ComputeEvent<HeightGen>>
 ) {
+
+    // Create a new image
+    let mut image = Image::new_fill(
+        Extent3d {
+            width: TEXTURE_SIZE as u32,
+            height: TEXTURE_SIZE as u32,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[0, 0, 0, 255],
+        // Currently only support binding as Texture Storage
+        TextureFormat::Rgba8Unorm, 
+        // Since we will be copying this image back and using it        
+        RenderAssetUsages::all(),
+    );
+
+    // we will be using this image as source and destination for copy, 
+    // and using it as a storage texture and texture binding since we 
+    // will use it for StandardMaterial
+    image.texture_descriptor.usage = TextureUsages::COPY_SRC
+        | TextureUsages::COPY_DST
+        | TextureUsages::STORAGE_BINDING
+        | TextureUsages::TEXTURE_BINDING;
+
+    // Create our inital mesh and colider from the image
+    let mesh = terrain_config.generate_mesh(&image);
+    let collider = terrain_config.generate_collider(&image);
+
+    let image_handle = images.add(image);
+    
+    // IMPORTANT: Setting up both resources to use the same image
+    commands.insert_resource(HeightGen {
+        image: image_handle.clone(),
+        ..default()
+    });
+    // we also want it to run once at startup
+    compute_terrain.send(ComputeEvent::<HeightGen>::new(DISPATCH_SIZE));
+
+    commands.insert_resource(HeightBrush {
+        image: image_handle.clone(),
+        ..default()
+    });
+
+    // Create our Terrain
+    commands.spawn((
+        PbrBundle {            
+            mesh: meshes.add(mesh),
+            material: materials.add(StandardMaterial {
+                // will use the same image for the texture for now
+                base_color_texture: Some(image_handle.clone()),
+                ..Default::default()
+            }),
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+            ..default()
+        },
+        RigidBody::Static,        
+        collider,
+        Ground,
+    ));
+
+    // setup camera
     commands.spawn((
         Camera3dBundle {
-            transform: Transform::from_translation(Vec3::new(0.0, 10.0, 10.0))
+            transform: Transform::from_translation(Vec3::new(0.0, 20.0, 20.0))
                 .looking_at(Vec3::ZERO, Vec3::Y),
             ..Default::default()
         },
-        PanOrbitCamera::default(),
+        PanOrbitCamera {
+            enabled: false,
+            ..Default::default()
+        },
+        MainCamera,
     ));
 
+    // Setup lighting
     commands.spawn(DirectionalLightBundle {
         transform: Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_4)),
         ..Default::default()
     });
 
-    // setup our terrain using image
-    commands.spawn((
-        PbrBundle {
-            // mesh will be updated by process_terrain
-            mesh: meshes.add(terrain.generate_mesh(&images)),
-            material: materials.add(StandardMaterial {
-                // image will be updated by process_terrain
-                base_color_texture: Some(terrain.image.clone()),
-                ..Default::default()
-            }),
-            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
 
-            ..Default::default()
-        },
-        RigidBody::Static,
-        Collider::cuboid(20.0, 0.1, 20.0),
-        Ground,
-    ));
+    info!("Press SPACE to toggle brush and camera controls");
+    info!("Press F1 to toggle debug wireframe");
+
+    // turn off physics debug
+    let (config, _) = config_store.config_mut::<PhysicsGizmos>();
+    config.enabled = false;
 }
 
 fn process_terrain(
-    terrain: Res<Terrain>,
+    terrain: Res<HeightGen>,
+    terrain_config: Res<TerrainMeshConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut images: ResMut<Assets<Image>>,
+    images: Res<Assets<Image>>,
     mut query: Query<(&mut Handle<Mesh>, &mut Collider), With<Ground>>,
 ) {
+    // find existing ground
     let Ok((mut mesh_handle, mut collider)) = query.get_single_mut() else {
         warn!("update terrain failed, no ground found");
         return;
     };
 
-    // update mesh
-    *mesh_handle = meshes.add(terrain.generate_mesh(&mut images));
+    // get updated image from assets
+    let image = images.get(&terrain.image).unwrap();
 
-    // update colider
-    *collider = terrain.generate_collider(&images);
+    // generate new mesh and colider from image
+    *mesh_handle = meshes.add(terrain_config.generate_mesh(image));
+    *collider = terrain_config.generate_collider(image);
 }
 
-fn toggle_wireframe(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut wireframe_config: ResMut<WireframeConfig>,
-) {
-    if keys.just_pressed(KeyCode::F1) {
-        wireframe_config.global = !wireframe_config.global;
-    }
+
+
+// Check if the image has been updated
+fn image_updated(
+    terrain_image: Res<HeightGen>, // could have got the reference from brush or 
+                                   // any other resource that uses the same image
+    mut asset_events: EventReader<AssetEvent<Image>>
+) -> bool {
+    asset_events.read().any(|e| match e {
+        AssetEvent::Modified { id } => id == &terrain_image.image.id(),
+        _ => false,
+    })
 }
 
-impl Terrain {
-    fn generate_mesh(&self, images: &Assets<Image>) -> Mesh {
-        let divisions = TEXTURE_SIZE as usize;
-        let half_divisions = divisions as f32 / 2.0;
-
-        let image = images.get(&self.image).unwrap();
-        let pixel_size = image.texture_descriptor.format.pixel_size();
-
-        let num_vertices = divisions * divisions;
-        let num_indices = (divisions - 1) * (divisions - 1) * 6;
-
-        let mut positions: Vec<[f32; 3]> = Vec::with_capacity(num_vertices as usize);
-        let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(num_vertices as usize);
-        let mut indices: Vec<u32> = Vec::with_capacity(num_indices as usize);
-
-        for y in 0..divisions {
-            for x in 0..divisions {
-                // Calculate the position in the image
-                let img_x = (x * divisions) / divisions;
-                let img_y = (y * divisions) / divisions;
-                let index = (img_y * divisions + img_x) * pixel_size;
-
-                if index + 3 < image.data.len() {
-                    let pixel_data = &image.data[index..(index + pixel_size)];
-
-                    let pos = [
-                        ((x as f32 - half_divisions) / divisions as f32) * self.world_size as f32,
-                        pixel_data[0] as f32 / 255.0,
-                        ((y as f32 - half_divisions) / divisions as f32) * self.world_size as f32,
-                    ];
-
-                    positions.push(pos);
-
-                    // Vertex index in the positions array
-                    let vertex_index = y * divisions + x;
-
-                    uvs.push([x as f32 / divisions as f32, y as f32 / divisions as f32]);
-
-                    if x < divisions - 1 && y < divisions - 1 {
-                        let a = vertex_index;
-                        let b = vertex_index + divisions;
-                        let c = vertex_index + divisions + 1;
-                        let d = vertex_index + 1;
-
-                        indices.push(a as u32);
-                        indices.push(b as u32);
-                        indices.push(c as u32);
-
-                        indices.push(c as u32);
-                        indices.push(d as u32);
-                        indices.push(a as u32);
-                    }
-                }
-            }
-        }
-
-        // build our mesh
-        let mut mesh = Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::RENDER_WORLD,
-        );
-        mesh.insert_indices(Indices::U32(indices));
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-
-        // compute normals
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-        mesh.duplicate_vertices();
-        mesh.compute_flat_normals();
-
-        mesh
-    }
-
-    pub fn generate_collider(&self, images: &Assets<Image>) -> Collider {
-        let divisions = TEXTURE_SIZE as usize;
-        //let half_divisions = divisions as f32 / 2.0;
-
-        let image = images.get(&self.image).unwrap();
-        let pixel_size = image.texture_descriptor.format.pixel_size();
-
-        let mut heights: Vec<Vec<Scalar>> = Vec::with_capacity(divisions);
-        let scale = Vec3::new(self.world_size as f32, 1.0, self.world_size as f32);
-        for y in 0..divisions {
-            let mut row: Vec<Scalar> = Vec::with_capacity((divisions) as usize);
-            for x in 0..divisions {
-                let img_x = (x * divisions) / divisions;
-                let img_y = (y * divisions) / divisions;
-                let index = (img_y * divisions + img_x) * pixel_size;
-
-                let _pixel_data = &image.data[index..(index + pixel_size)];
-                //row.push(pixel_data[0] as f32 / 255.0);
-                row.push((y as f32).sin());
-            }
-            heights.push(row);
-        }
-        Collider::heightfield(heights, scale)
-    }
+// dispatch compute pass
+fn height_compute(mut compute_terrain: EventWriter<ComputeEvent<HeightGen>>) {
+    compute_terrain.send(ComputeEvent::<HeightGen>::new(DISPATCH_SIZE));
 }
 
+// UI to see everything
 fn terrain_inspector_ui(world: &mut World) {
     let egui_context = world
         .query_filtered::<&mut EguiContext, With<PrimaryWindow>>()
@@ -317,12 +261,40 @@ fn terrain_inspector_ui(world: &mut World) {
     };
     let mut egui_context = egui_context.clone();
 
+    let mut id = 1337; // TODO: find better way to get unique id
     egui::Window::new("Terrain")
         .default_size((200., 500.))
         .show(egui_context.get_mut(), |ui| {
             egui::ScrollArea::both().show(ui, |ui| {
-                bevy_inspector::ui_for_resource::<Terrain>(world, ui);
+                ui.heading("Height Gen");
+                ui.push_id(id, |ui| {
+                    bevy_inspector::ui_for_resource::<HeightGen>(world, ui)
+                });
+                id = id + 1;
+
+                if ui.add(egui::widgets::Button::new("Reset Image")).clicked() {
+                    // we could acces the image and reset data, then trigger HeightGen
+                    // but since HeightGen clears everything, we can just set it to changed
+                    world.get_resource_mut::<HeightGen>().unwrap()
+                        .set_changed();
+                }
+
+                ui.heading("Mesh Config");
+                ui.push_id(id, |ui| {
+                    bevy_inspector::ui_for_resource::<TerrainMeshConfig>(world, ui)
+                });
+                id = id + 1;
+
+                ui.heading("Brush");
+                ui.push_id(id, |ui| {
+                    bevy_inspector::ui_for_resource::<HeightBrush>(world, ui)
+                });
+                id = id + 1;
+                ui.label("MouseScroll to resize brush");
+                ui.label("Control to flip strength");
+
                 ui.allocate_space(ui.available_size());
             });
         });
 }
+

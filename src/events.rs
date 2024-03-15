@@ -7,6 +7,8 @@ use crate::{ComputeShader, ComputeTrait};
 /// Message to notify the App world that the compute has completed
 #[derive(Event)]
 pub struct ComputeComplete<T: ComputeTrait> {    
+
+    // TODO: dont support yet, but need to
     pub dont_copy: bool,
     pub _marker: PhantomData<T>,
 }
@@ -24,7 +26,7 @@ impl<T: ComputeTrait> Default for ComputeComplete<T> {
 #[derive(Event, Clone)]
 pub struct ComputeEvent<T: ComputeTrait> {
     pub passes: Vec<Pass>,
-    pub dont_copy: bool,
+    pub no_staging: bool,
     pub _marker: PhantomData<T>,
     
 }
@@ -37,7 +39,7 @@ impl<T: ComputeTrait> Default for ComputeEvent<T> {
                 entry: T::entry_points().first().expect("no entry points"),
                 workgroups: vec![UVec3::new(1, 1, 1)],
             }], 
-            dont_copy: false,
+            no_staging: false,
             _marker: Default::default()
          }
     }
@@ -87,6 +89,10 @@ impl<T: ComputeTrait> ComputeEvent<T> {
         self
     }
 
+    pub fn no_staging(mut self) -> Self {
+        self.no_staging = true;
+        self
+    }
 }
 
 /// A pass to run a compute shader
@@ -129,11 +135,9 @@ pub fn shader_modified<T: ComputeShader + ComputeTrait>(
     mut notify_events: EventWriter<ComputeShaderModified<T>>,
     asset_server: Res<AssetServer>,
 ) {
+    // cache the asset id
     let asset_id = match *asset_id_option {        
-        Some(id) => {
-            let n  = id.clone();
-            n
-        }
+        Some(id) => id.clone(),
         None => {
             let id = match T::shader() {
                 ShaderRef::Handle(handle) => handle.id(),
