@@ -31,16 +31,13 @@ The only additional option is 'staging', which when used with ComputePlugin will
 
 ## Examples
 
-See Examples:
-
-
+You will most likely want to run in release mode. See Examples:
 
 - [basic](examples/basic.rs)-[wgsl](assets/basic.wgsl) - The Simplest use case
 - [image](examples/image.rs)-[wgsl](assets/image.wgsl) - Compute image and use it in material, and save image it to file
 - [terrain](examples/terrain.rs) - generates mesh and collider from image, brush to let you paint on it
 - [paint](examples/paint.rs) - (doesn't use staging), lets you paint to different standard materials entities
-
-- [many](examples/many.rs)-(uses basic) - Multiple ComputeWorkerPlugins
+- [many](examples/many.rs)-(uses basic) - Multiple ComputePlugins
 
 ### TODO
 
@@ -51,6 +48,7 @@ See Examples:
     - [X] Tested with R32Float, R8uint, Rgba8Unorm
     - [ ] add error to macro when and check for readwrite support depending on format [notes](https://webgpufundamentals.org/webgpu/lessons/webgpu-storage-textures.html)
   - [ ] Buffer  
+  - [ ] Texture
 - Examples:
   - [x] Basic
   - [x] Inspect
